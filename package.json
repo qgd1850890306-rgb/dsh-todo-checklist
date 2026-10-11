@@ -1,0 +1,134 @@
+{
+  "name": "dsh-todo-checklist",
+  "version": "1.2.9",
+  "description": "DeepSeek Harness 待办插件：划词加入待办、对话自动捕获、左侧栏面板汇总与到期提醒（应用内弹窗或机器人推送），数据跨重启持久保存。Todo sidecar for DeepSeek Harness: selection-to-todo, chat-captured todos, a left sidebar panel and due reminders (in-app popup or IM bot push), persisted across restarts.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "main": "lib/host.js",
+  "exports": {
+    ".": {
+      "default": "./lib/host.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./typert": {
+      "default": "./lib/typert.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/host.js",
+    "lib/typert.js",
+    "lib/client.js",
+    "host/index.js",
+    "host/store.js",
+    "client-src/index.js",
+    "scripts/build-client.mjs",
+    "scripts/build-host.mjs",
+    "typert.js",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build-client.mjs && node scripts/build-host.mjs",
+    "build:client": "node scripts/build-client.mjs",
+    "build:host": "node scripts/build-host.mjs"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "todo",
+    "task",
+    "reminder",
+    "sidebar",
+    "待办"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-typert-registry",
+        "@deepseek-ai/dsh-client-connection"
+      ]
+    },
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.1",
+      "dshReleases": {
+        "0.2.0-rc.1": "compatible",
+        "0.2.0-rc.2": "compatible"
+      }
+    }
+  },
+  "dshhub": {
+    "schemaVersion": 1,
+    "displayName": "DSH 待办（划词待办 / 侧边栏面板）",
+    "summary": "把对话里的待办沉淀下来的侧边栏插件：划选对话文本即可加入待办、对话结束自动捕获待办、左侧面板汇总查看与勾选，支持到期提醒（应用内弹窗或机器人推送）与跨重启持久保存。",
+    "categories": [
+      "UI 增强",
+      "工作流与自动化",
+      "通知与集成"
+    ],
+    "surfaces": [
+      "host",
+      "web"
+    ],
+    "capabilities": {
+      "provides": [
+        "service:todos"
+      ]
+    },
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.1",
+      "node": ">=22.18.0"
+    },
+    "permissions": {
+      "storage": [
+        "dsh_todo_sidecar_items"
+      ],
+      "llm": [
+        "prompt"
+      ],
+      "im": [
+        "bot-push"
+      ],
+      "session": [
+        "read-events",
+        "create"
+      ],
+      "workspace": [
+        "list"
+      ],
+      "fs": [],
+      "network": []
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-storage-domain": "^0.1.0-rc.6 || ^0.1.1-0 || ^0.1.2-0 || ^0.1.3-0 || ^0.1.5-0 || >=0.2.0-rc.1 <0.3.0-0",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6 || ^0.1.1-0 || ^0.1.2-0 || ^0.1.3-0 || ^0.1.5-0 || >=0.2.0-rc.1 <0.3.0-0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "zod": "^4.5.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qgd1850890306-rgb/dsh-todo-checklist.git"
+  },
+  "homepage": "https://github.com/qgd1850890306-rgb/dsh-todo-checklist#readme",
+  "bugs": {
+    "url": "https://github.com/qgd1850890306-rgb/dsh-todo-checklist/issues"
+  },
+  "author": "qgd1850890306-rgb",
+  "license": "MIT"
+}

@@ -1,0 +1,5 @@
+# dsh-todo-checklist 插件层：向 web profile 插入 todo-sidecar 宿主插件。
+# Client 半边由 package.json 的 dsh.client 声明自动加载，无需在此登记。
+- insert:
+    - id: todo
+      name: dsh-todo-checklist
