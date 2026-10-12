@@ -2,6 +2,8 @@
 
 DeepSeek Harness（DSH）的待办插件：**把对话里冒出来的待办沉淀下来**。
 
+[![Platform](https://img.shields.io/badge/platform-DeepSeek%20Harness-blue)](#环境要求) [![Version](https://img.shields.io/badge/version-1.3.0-green)](#功能) [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](#许可)
+
 > Todo sidecar plugin for DeepSeek Harness: capture todos straight from the conversation, review them in a left sidebar panel, and get due reminders via in-app popup or IM bot push. Data persists across restarts.
 
 ---
