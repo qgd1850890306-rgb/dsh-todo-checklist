@@ -12,6 +12,7 @@
 import { Component, createElement as h, Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { TYPERT } from '../typert.js'
+import { SegmentDueInput } from './segment-due-input.js'
 
 //#region Typert 客户端描述符：宿主清单纯展开（全字段�
 export const TYPERT_REMOTE = {
@@ -1001,48 +1002,10 @@ function TodoPopup({ text, sessionId, locator, todosApi, onClose, onAdded, showT
         if (rb.ok) setImBots(Array.isArray(rb.value?.bots) ? rb.value.bots : [])
       } catch { }
     })()
-  }, [todosApi])  // v1.1.2 修复⑤：±步进按钮作用于"最后编辑的字段"（默认分钟）
-  const [dueField, setDueField] = useState('minute') // 'day' | 'hour' | 'minute'
-  // v1.1.3 修复②：维护上一�?input value，供 onChange 前后对比推断编辑字段
+  }, [todosApi])  // v1.3.0 反馈①：分段式提醒时间输入接管 ± 步进（dueField/stepDue/inferDueFieldByDiff 退役，逻辑移入 SegmentDueInput）
   const dueLocalRef = useRef(dueLocal)
-  // v1.1.3 修复②：任何路径改了 dueLocal（快�?chips、±步进等）都同步基准，防止对比失�
+  // 任何路径改了 dueLocal（快捷胶囊、分段输入等）都同步基准 ref
   useEffect(() => { dueLocalRef.current = dueLocal }, [dueLocal])
-
-  /** v1.1.2 修复⑤：�?dueLocal 的指定字段步进（分钟±30，小�?日期±1），自动进位�?*/
-  const stepDue = useCallback((dir) => {
-    setDueLocal((prev) => {
-      const base = typeof prev === 'string' && prev.length >= 16 ? prev : (() => {
-        const d = new Date()
-        const pad = (v) => String(v).padStart(2, '0')
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-      })()
-      const [datePart, timePart] = base.split('T')
-      const [y, mo, dd] = datePart.split('-').map(Number)
-      const [hh, mi] = timePart.split(':').map(Number)
-      const d = new Date(y, mo - 1, dd, hh, mi)
-      if (dueField === 'minute') d.setMinutes(d.getMinutes() + dir * 30)
-      else if (dueField === 'hour') d.setHours(d.getHours() + dir)
-      else d.setDate(d.getDate() + dir)
-      const pad = (v) => String(v).padStart(2, '0')
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-    })
-  }, [dueField])
-
-  /**
-   * v1.1.3 修复②：推断"最后编辑的字段"（date=�? hour=�? minute=分）�?   * 真凶复盘：datetime-local 是浏览器 Shadow DOM 分段输入，input.selectionStart 恒为 null�?   * �?inferDueField 永远返回 'minute' �?无论改哪个字�?± 都作用在分钟上�?   * 改为对比编辑前后�?value（YYYY-MM-DDTHH:mm），取第一个差异字符的位置定位字段�?   * pos�? �?日期段（含年/月），pos�?2 �?小时段，否则 �?分钟段�?   */
-  const inferDueFieldByDiff = useCallback((prevValue, nextValue) => {
-    const prev = typeof prevValue === 'string' ? prevValue : ''
-    const next = typeof nextValue === 'string' ? nextValue : ''
-    if (prev.length === 0 || next.length === 0 || prev === next) return 'minute'
-    const len = Math.min(prev.length, next.length)
-    let pos = len
-    for (let i = 0; i < len; i++) {
-      if (prev[i] !== next[i]) { pos = i; break }
-    }
-    if (pos <= 9) return 'day'
-    if (pos <= 12) return 'hour'
-    return 'minute'
-  }, [])
 
   const quickDue = useCallback((offsetHours) => {
     const d = new Date(Date.now() + offsetHours * 3_600_000)
@@ -1184,39 +1147,14 @@ function TodoPopup({ text, sessionId, locator, todosApi, onClose, onAdded, showT
         },
       }, tab.label)),
     ),
-    // 单次模式：日历日期时间选择（保留原生日历形式，通过 color-scheme 跟随主题�
-    recurMode === 'once' ? h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10 } },
-      h('input', {
-        type: 'datetime-local',
-        style: {
-          ...style.input, flex: 1, minWidth: 0, boxSizing: 'border-box',
-          colorScheme: 'light dark',
-          background: 'var(--dsw-alias-bg-layer-1)',
-          color: 'var(--dsw-alias-label-primary)',
-          border: '1px solid var(--dsw-alias-border-l2)',
-          borderRadius: 8,
-          padding: '8px 10px',
-          fontSize: 13,
-        },
+    // 单次模式：分段式日期时间选择（v1.3.0 反馈①：点哪段 + 就加哪段；原生 datetime-local 的
+    // closed shadow root 无法感知聚焦分段，故换自绘分段组件，行为规格见 segment-due-input.js）
+    recurMode === 'once' ? h('div', { style: { marginBottom: 10 } },
+      h(SegmentDueInput, {
         value: dueLocal,
-        onChange: (event) => {
-          // v1.1.3 修复②：用前�?value 差异定位用户改的是日�?小时/分钟，�?按钮随后跟随该字�
-          const next = event.target.value ?? ''
-          setDueField(inferDueFieldByDiff(dueLocalRef.current, next))
-          dueLocalRef.current = next
-          setDueLocal(next)
-        },
+        onChange: (next) => { dueLocalRef.current = next; setDueLocal(next) },
+        inputStyle: { fontSize: 13, padding: '8px 10px' },
       }),
-      h('button', {
-        type: 'button', title: '减：最后编辑的字段 −1 步（分钟=−30分钟 / 小时=−1小时 / 日期=−1天）', 'aria-label': '减少提醒时间',
-        onClick: () => stepDue(-1),
-        style: { width: 32, borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', flexShrink: 0 },
-      }, '−'),
-      h('button', {
-        type: 'button', title: '加：最后编辑的字段 +1 步（分钟=+30分钟 / 小时=+1小时 / 日期=+1天）', 'aria-label': '增加提醒时间',
-        onClick: () => stepDue(+1),
-        style: { width: 32, borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer', border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', flexShrink: 0 },
-      }, '+'),
     ) : null,
     (recurMode === 'daily' || recurMode === 'weekly') ? h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10 } },
       h('select', {
@@ -1834,7 +1772,7 @@ h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'spac
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', { style: { fontSize: 16 } }, '📋'),
           h('span', { style: { fontSize: 15, fontWeight: 600 } }, '待办清单设置'),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.2.9'),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.3.0'),
         ),
         h('button', { type: 'button', onClick: onClose, style: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--dsh-alias-label-secondary)', padding: '4px 8px' } }, '×'),
       ),
@@ -2192,7 +2130,7 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
     // 头部（参考 dsh-archive-manager）
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '16px 0', borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)' } },
       h('h2', { style: { fontSize: 20, fontWeight: 600, margin: 0 } }, '待办清单'),
-      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.2.9'),
+      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.3.0'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 'auto' } }, 'GitHub'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/issues', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none' } }, '问题反馈'),
       h('a', { href: 'https://www.npmjs.com/package/dsh-todo-checklist', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none' } }, '检查更新'),
@@ -2510,43 +2448,9 @@ function TodoEditDialog({ item, todosApi, onClose, onSaved, onConvert, showToast
   const [saving, setSaving] = useState(false)
   // v1.1.2 内容框自适应高度（最�?140，随内容增长，避免内容多看不全）
   const contentRef = useRef(null)
-  // v1.1.6 反馈①③：±步进按钮作用于"最后编辑的字段"（默认分钟），复�?TodoPopup v1.1.3 模式
-  const [dueField, setDueField] = useState('minute') // 'day' | 'hour' | 'minute'
+  // v1.3.0 反馈①：分段式提醒时间输入接管 ± 步进（dueField/stepOnceLocal/inferOnceFieldByDiff 退役）
   const onceLocalRef = useRef(onceLocal)
   useEffect(() => { onceLocalRef.current = onceLocal }, [onceLocal])
-  /** �?onceLocal 的指定字段步进（分钟±30，小�?日期±1），自动进位；空值取当前时间�?*/
-  const stepOnceLocal = useCallback((dir) => {
-    setOnceLocal((prev) => {
-      const base = typeof prev === 'string' && prev.length >= 16 ? prev : (() => {
-        const d = new Date()
-        const pad = (v) => String(v).padStart(2, '0')
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-      })()
-      const [datePart, timePart] = base.split('T')
-      const [y, mo, dd] = datePart.split('-').map(Number)
-      const [hh, mi] = timePart.split(':').map(Number)
-      const d = new Date(y, mo - 1, dd, hh, mi)
-      if (dueField === 'minute') d.setMinutes(d.getMinutes() + dir * 30)
-      else if (dueField === 'hour') d.setHours(d.getHours() + dir)
-      else d.setDate(d.getDate() + dir)
-      const pad = (v) => String(v).padStart(2, '0')
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-    })
-  }, [dueField])
-  /** 对比编辑前后�?value 定位最后编辑的字段：pos�? �?日期段，pos�?2 �?小时段，否则 �?分钟段�?*/
-  const inferOnceFieldByDiff = useCallback((prevValue, nextValue) => {
-    const prev = typeof prevValue === 'string' ? prevValue : ''
-    const next = typeof nextValue === 'string' ? nextValue : ''
-    if (prev.length === 0 || next.length === 0 || prev === next) return 'minute'
-    const len = Math.min(prev.length, next.length)
-    let pos = len
-    for (let i = 0; i < len; i++) {
-      if (prev[i] !== next[i]) { pos = i; break }
-    }
-    if (pos <= 9) return 'day'
-    if (pos <= 12) return 'hour'
-    return 'minute'
-  }, [])
   const autoGrow = useCallback((el) => {
     if (!el) return
     el.style.height = 'auto'
@@ -2661,31 +2565,14 @@ function TodoEditDialog({ item, todosApi, onClose, onSaved, onConvert, showToast
       [['once', '单次'], ['daily', '每天'], ['weekly', '每周']].map(([k, l]) =>
         h('button', { type: 'button', key: k, onClick: () => setMode(k), style: cap(mode === k) }, l)),
     ),
-    // 单次：日期 + ±步进按钮（v1.1.6 反馈①③，逻辑同 TodoPopup：分钟±30/小时±1/日期±1）
+    // 单次：分段式日期 + ±步进按钮（v1.3.0 反馈①：点哪段 + 就加哪段，组件内置 ±，逻辑同 TodoPopup）
     mode === 'once'
       ? h('div', null,
-        h('div', { style: { display: 'flex', gap: 6, alignItems: 'center' } },
-          h('input', {
-            type: 'datetime-local', value: onceLocal,
-            onChange: (e) => {
-              const next = e.target.value ?? ''
-              setDueField(inferOnceFieldByDiff(onceLocalRef.current, next))
-              onceLocalRef.current = next
-              setOnceLocal(next)
-            },
-            style: { flex: 1, minWidth: 0, boxSizing: 'border-box', colorScheme: 'light dark', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8, padding: '8px 10px', fontSize: 13 },
-          }),
-          h('button', {
-            type: 'button', title: '最后编辑的字段 −1 步（分钟=−30分钟/小时=−1小时/日期=−1天）',
-            onClick: () => stepOnceLocal(-1),
-            style: { width: 32, height: 32, borderRadius: 8, border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', cursor: 'pointer', fontSize: 15, lineHeight: 1 },
-          }, '−'),
-          h('button', {
-            type: 'button', title: '最后编辑的字段 +1 步（分钟=+30分钟/小时=+1小时/日期=+1天）',
-            onClick: () => stepOnceLocal(+1),
-            style: { width: 32, height: 32, borderRadius: 8, border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', cursor: 'pointer', fontSize: 15, lineHeight: 1 },
-          }, '+'),
-        ),
+        h(SegmentDueInput, {
+          value: onceLocal,
+          onChange: (next) => { onceLocalRef.current = next; setOnceLocal(next) },
+          inputStyle: { fontSize: 13, padding: '8px 10px' },
+        }),
         onceLocal.length === 0 ? h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', marginTop: 6 } }, '未设置提醒时间——点快捷胶囊或 ± 按钮开始设置') : null,
       )
       : null,

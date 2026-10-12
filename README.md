@@ -1,10 +1,39 @@
 # dsh-todo-checklist ·「待办清单」
 
-DeepSeek Harness（DSH）的待办插件：**把对话里冒出来的待办沉淀下来**——划词即可加入待办、对话里说一句就自动记录、左侧栏面板汇总查看，到期用应用内弹窗或机器人提醒，数据跨重启不丢。
+DeepSeek Harness（DSH）的待办插件：**把对话里冒出来的待办沉淀下来**。
 
-> Todo sidecar plugin for DeepSeek Harness: capture todos straight from the conversation (text selection or a single sentence), review them in a left sidebar panel, and get due reminders via in-app popup or IM bot push. Data persists across restarts.
+> Todo sidecar plugin for DeepSeek Harness: capture todos straight from the conversation, review them in a left sidebar panel, and get due reminders via in-app popup or IM bot push. Data persists across restarts.
 
-面向 **DSH 0.2.0-rc.x 运行时**（已在 `0.2.0-rc.1` / `0.2.0-rc.2` 实测）。
+---
+
+## 它能帮你做什么
+
+- **划词加待办** —— 选中对话里的一句话，点「＋ 待办」，一句话变成一条待办
+- **AI 记录待办** —— 把划词内容交给模型，自动拆成 标题 / 内容 / 提醒时间
+- **对话自动记录** —— 说「记一下……」，模型调用内置工具 `todo_add` 写入
+- **侧栏汇总** —— 左侧面板统一查看、搜索、筛选、勾选、分组
+- **到期提醒** —— 到点弹**应用内提醒**，或推送到你的 **DSH-IM 机器人**
+- **数据不丢** —— 重启 DSH 数据还在；单条数据损坏只影响该条，不影响整体
+
+---
+
+## 快速上手（3 步）
+
+1. **安装**：左侧栏 → 插件 → 添加插件 → 填 `dsh-todo-checklist` → **完全退出并重启 DSH**
+2. **加一条**：在任意对话里选中一句话 → 点「＋ 待办」→ 选「🤖 AI 记录待办」或手动填写
+3. **看与处理**：点左侧图标列底部的「待办清单」展开；勾选完成、双击跳回原句、到期自动提醒
+
+---
+
+## 截图
+
+> 待安装后截取（划词气泡 / AI 记录弹窗 / 左侧面板）。
+
+<!--
+| 划词气泡 | AI 记录弹窗 | 左侧面板 |
+|---|---|---|
+| ![划词气泡](./screenshots/bubble.png) | ![弹窗](./screenshots/popup.png) | ![面板](./screenshots/sidebar.png) |
+-->
 
 ---
 
@@ -17,10 +46,12 @@ DeepSeek Harness（DSH）的待办插件：**把对话里冒出来的待办沉�
 | 左侧栏面板 | 挂在官方左侧图标列底部：收纳态显示「待办清单 · 预期 N 项 · 待完成 N 项」，展开为列表；含搜索、全部提醒筛选、未完成 / 已完成 / 已放弃 / 逾期 分组 |
 | 到期提醒 | 每 30 秒扫描：到点弹**应用内提醒**（可「知道了 / 查看 / 完成」，查看会跳回划词所在会话并高亮原句），或经 **DSH-IM 机器人推送**（可全局设置，也可单条待办覆盖机器人 / 目标） |
 | 待办处理 | 勾选完成；双击标题或点 ↗ 新建会话（自动带上来源会话的工作区与模型，发送后该待办自动完成）；行内图标：编辑 / 转 AI 总结 / 删除 |
-| 编辑与延期 | 编辑标题、内容、提醒时间（± 按钮：选中分钟 ±30 分钟，选中小时 / 日期 ±1）；延期三档：+1 天、下周一 09:00、自定义 |
+| 编辑与延期 | 编辑标题、内容、提醒时间（**分段式输入：年 / 月 / 日 / 时 / 分，点哪段 ± 就加哪段**，分 ±30 分钟、时 ±1、日 ±1、月 ±1、年 ±1，自动进位）；延期三档：+1 天、下周一 09:00、自定义 |
 | 转 AI 总结 | 把已有待办交给模型重新整理成结构化内容，并替换原条目 |
 | 转定时任务 | 把待办转成周期性定时任务（**需已安装「定时任务」dsh-tasks 插件**，未安装时会给明确提示） |
 | 持久保存 | 个人存储域 `dsh_todo_sidecar_items`，重启 DSH 不丢；单条数据损坏只影响该条，不会让整个插件不可用 |
+
+---
 
 ## 环境要求
 
@@ -28,6 +59,8 @@ DeepSeek Harness（DSH）的待办插件：**把对话里冒出来的待办沉�
 - Node.js `>= 22.18.0`
 - 桌面端或 Web 端均可（客户端面声明 `platform: web`）
 - **零运行时依赖**：宿主面已打包成自包含文件（`lib/host.js`、`lib/typert.js`，zod 已内联），安装时不需要下载任何依赖，离线 / 本地目录 / npm / tarball 四种装法都一致可用。
+
+---
 
 ## 安装
 
@@ -62,12 +95,17 @@ dsh plugin --profile desktop remove dsh-todo-checklist
 
 安装成功的标志：打开任意会话，左侧图标列底部出现「待办清单」。
 
+---
+
 ## 使用
 
 - **加待办**：选中对话文字 → 点「＋ 待办」→ 选「🤖 AI 记录待办」让模型整理，或手动填标题 / 内容 / 提醒时间。
+- **设提醒时间**：单次模式下，**点「年 / 月 / 日 / 时 / 分」任一段，再点 − / ＋ 按钮**，就在该段上步进（分 ±30、其余 ±1）；键盘 ↑ / ↓ 同样步进，← / → 切换段。
 - **看与改**：点左侧「待办清单」展开；勾选完成；行内 ✎ 编辑、✦ 转 AI 总结、✕ 删除；⋯ 菜单为编辑 / 删除。
 - **到点提醒**：默认弹应用内提醒；要在设置页勾选「DSH-IM 推送」后才会同时推送到机器人（需先装 dsh-im 并配置好机器人）。
 - **新建会话**：双击待办标题，或点行内 ↗，会新建一个会话并把待办内容预填进输入框；新会话沿用**划词时那个会话的工作区与模型**，发送后该待办自动标记完成。
+
+---
 
 ## 数据、隐私与权限
 
@@ -75,6 +113,8 @@ dsh plugin --profile desktop remove dsh-todo-checklist
 - **网络**：插件自身不发起任何外部网络请求；只有在你启用「DSH-IM 推送」时，才会通过本机 DSH-IM 服务把提醒发给你已配置的机器人。
 - **日志**：默认不写任何日志文件。排障时设环境变量 `DSH_TODO_DEBUG=1`，日志写入 `<DSH_HOME>/dsh-todo/diag.jsonl`（可用 `DSH_TODO_STATE_DIR` 改目录）。
 - **能力使用**：会话事件只读（用于到期提醒与自动完成）、按需创建会话（AI 记录 / 新建会话）、读取工作区列表、调用模型（AI 记录与 AI 总结）、调用 DSH-IM 发消息。
+
+---
 
 ## 已知限制
 
@@ -84,6 +124,8 @@ dsh plugin --profile desktop remove dsh-todo-checklist
 - **AI 记录 / AI 总结会产生一次模型调用**（按你当前配置的模型计费）。
 - 多个 DSH 实例同时运行时，同一条待办的机器人推送只会发出一次（跨进程原子认领）。
 
+---
+
 ## 故障排查
 
 - 打开 **F12 → Console**：
@@ -92,6 +134,8 @@ dsh plugin --profile desktop remove dsh-todo-checklist
 - 提示「存储不可用」=待办数据文件无法解析，检查 `<DSH_HOME>/storages/dsh_todo_sidecar_items.json` 是否为合法 JSON。
 - 提示「插件刚更新过：请重启 DSH 桌面端后重试」=宿主与界面的方法清单不一致，重启即可。
 - 修改了「在左侧边栏显示待办清单」开关后，需要重启 DSH 生效。
+
+---
 
 ## 开发
 
@@ -119,6 +163,8 @@ dsh-todo-checklist/
 - `dependencies` 故意留空（zod 只在构建期需要，放在 `devDependencies`）：这样 `link:` 安装、离线安装都不会因为缺依赖导致插件激活失败。
 - 打发布包（换名 + 重建产物 + 自检）：`node scripts/release-pack.mjs --name <npm包名>`。
 - 变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
+
+---
 
 ## 许可
 

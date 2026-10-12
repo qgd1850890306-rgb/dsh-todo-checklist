@@ -16,7 +16,7 @@ const esc = (s) => s.split('').map(U).join('');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
 check('package name', pkg.name === NAME, pkg.name);
-check('version', pkg.version === '1.2.9', pkg.version);
+check('version', pkg.version === '1.3.0', pkg.version);
 check('files 为文件级（无目录项）', pkg.files.every((f) => !f.endsWith('/')), JSON.stringify(pkg.files));
 check('dshhub 块存在', !!pkg.dshhub && pkg.dshhub.schemaVersion === 1);
 check('peerDeps 重写', />=0\.2\.0-rc\.1 <0\.3\.0-0/.test(pkg.peerDependencies['@deepseek-ai/dsh-storage-domain']));
@@ -31,7 +31,7 @@ check('client 无旧 id 注册', !client.includes('id: "dsh-todo"'));
 check('client 无 U+FFFD', !client.includes('\uFFFD'));
 check('client 含侧栏槽位', client.includes('sidebar.footer.action'));
 check('client 含设置槽位', client.includes('settings.section'));
-check('client 含 v1.2.9 徽标', (client.split('v1.2.9').length - 1) === 2, `n=${client.split('v1.2.9').length - 1}`);
+check('client 含 v1.3.0 徽标', (client.split('v1.3.0').length - 1) === 2, `n=${client.split('v1.3.0').length - 1}`);
 check('client 含 待办清单设置', client.includes(esc('待办清单设置')));
 
 const host = fs.readFileSync(path.join(dir, 'host', 'index.js'), 'utf8');
