@@ -1503,14 +1503,16 @@ function GlobalReminderPopup({ todosApi, openSession }) {
 //#region 左侧侧栏常驻面板（v0.6：参�?cost-meter 样式 + 全局划词气泡，不依赖 dock 渲染�
 //#region v1.5.0 导出对话框（全部记录 → HTML / Markdown / Excel / CSV / JSON）
 /**
- * 导出全部记录的对话框。
+ * 导出全部记录的对话框 / 内联面板。
  *
  * 设计取舍：
  * - 范围只影响「导出哪些条目」，格式只影响「导出成什么文件」，两者独立；
  * - 格式卡片直接写出「给谁看」，因为用户的原始需求就是「给人看和给 AI 看」；
- * - 默认 HTML + 全部记录（最常见的「我想留一份完整档案」）。
+ * - 默认 HTML + 全部记录（最常见的「我想留一份完整档案」）；
+ * - v1.5.3：新增 inline 模式——设置页的折叠区直接复用这份表单，不弹遮罩。
+ *   侧栏头部的导出按钮已移除（用户要求「这个页面要简洁」）。
  */
-function ExportDialog({ items, onClose, showToast }) {
+function ExportDialog({ items, onClose, showToast, inline = false }) {
   const [format, setFormat] = useState('html')
   const [scope, setScope] = useState('all')
   const [busy, setBusy] = useState(false)
@@ -1540,11 +1542,11 @@ function ExportDialog({ items, onClose, showToast }) {
       const result = buildExportFile(all, {
         format,
         scope,
-        appVersion: '1.5.2',
+        appVersion: '1.5.3',
       })
       const filename = downloadExportFile(result)
       showToast(`已导出 ${result.count} 条记录：${filename}`)
-      onClose()
+      if (typeof onClose === 'function') onClose()
     } catch (error) {
       console.warn('[dsh-todo] export failed:', error)
       showToast(`导出失败：${error?.message ?? error}`)
@@ -1564,6 +1566,93 @@ function ExportDialog({ items, onClose, showToast }) {
     minWidth: 150, flex: '1 1 150px',
   })
 
+  // 表单主体（弹窗与内联共用，避免两处逻辑漂移）
+  const body = [
+    inline ? null : h('div', { style: { display: 'flex', alignItems: 'center', marginBottom: 4 } },
+      h('h3', { style: { fontSize: 16, fontWeight: 600, margin: 0 } }, '导出待办记录'),
+      h('button', {
+        type: 'button', onClick: onClose,
+        style: {
+          marginLeft: 'auto', border: 'none', background: 'transparent', cursor: 'pointer',
+          color: 'var(--dsw-alias-label-secondary)', padding: 4, lineHeight: 0,
+        },
+        title: '关闭',
+      }, h(IconX, { size: 16 })),
+    ),
+    h('p', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', margin: inline ? '0 0 14px' : '0 0 16px' } },
+      `共 ${stats.total} 条记录（未完成 ${stats.pending} / 已完成 ${stats.completed} / 已放弃 ${stats.abandoned}）。导出内容只包含这份清单，不含对话原文。`),
+
+    h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 6 } }, '导出成什么'),
+    h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 } },
+      EXPORT_FORMATS.map((option) => h('label', {
+        key: option.id, style: cardStyle(format === option.id),
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+          h('input', {
+            type: 'radio', name: 'dsh-todo-export-format', value: option.id,
+            checked: format === option.id,
+            onChange: () => setFormat(option.id),
+            style: { margin: 0, accentColor: 'var(--dsw-alias-brand-primary, #f59e0b)' },
+          }),
+          h('span', { style: { fontSize: 13, fontWeight: 600 } }, option.label),
+        ),
+        h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)', paddingLeft: 20 } }, option.audience),
+        h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', paddingLeft: 20, lineHeight: 1.45 } }, option.hint),
+      )),
+    ),
+
+    h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 6 } }, '导出哪些'),
+    h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+      EXPORT_SCOPES.map((option) => h('button', {
+        key: option.id, type: 'button', onClick: () => setScope(option.id),
+        title: option.hint,
+        style: {
+          padding: '5px 12px', fontSize: 12, cursor: 'pointer', borderRadius: 999,
+          border: `1px solid ${scope === option.id ? 'var(--dsw-alias-brand-primary, #f59e0b)' : 'var(--dsw-alias-border-l2, #ddd)'}`,
+          background: scope === option.id
+            ? 'color-mix(in srgb, var(--dsw-alias-brand-primary, #f59e0b) 12%, transparent)'
+            : 'transparent',
+          color: scope === option.id
+            ? 'var(--dsw-alias-brand-primary, #f59e0b)'
+            : 'var(--dsw-alias-label-secondary)',
+        },
+      }, option.label)),
+    ),
+
+    h('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: 10, marginTop: 18,
+        paddingTop: 14, borderTop: '1px solid var(--dsw-alias-border-l2, #eee)',
+      },
+    },
+      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } },
+        `将导出 ${previewCount} 条 → ${formatItem.label}`),
+      inline ? null : h('button', {
+        type: 'button', onClick: onClose,
+        style: {
+          marginLeft: 'auto', padding: '7px 16px', fontSize: 13, cursor: 'pointer',
+          borderRadius: 6, border: '1px solid var(--dsw-alias-border-l2, #ddd)',
+          background: 'transparent', color: 'var(--dsw-alias-label-primary)',
+        },
+      }, '取消'),
+      h('button', {
+        type: 'button', onClick: run, disabled: busy || previewCount === 0,
+        style: {
+          marginLeft: inline ? 'auto' : 0,
+          padding: '7px 18px', fontSize: 13, fontWeight: 500, borderRadius: 6, border: 'none',
+          cursor: busy || previewCount === 0 ? 'not-allowed' : 'pointer',
+          background: 'var(--dsw-alias-brand-primary, #f59e0b)', color: '#fff',
+          opacity: busy || previewCount === 0 ? 0.55 : 1,
+        },
+      }, busy ? '导出中…' : '导出文件'),
+    ),
+    h('p', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', margin: '10px 0 0', lineHeight: 1.5 } },
+      '文件会下载到浏览器的默认下载目录。HTML 可直接双击打开、也能打印成 PDF；Excel 可用 Excel / WPS 打开；Markdown / CSV / JSON 适合贴给 AI 或导入其它工具。'),
+  ]
+
+  // 内联模式：不弹遮罩、不占最大高度，交给设置页的折叠容器
+  if (inline) return h(Fragment, null, body)
+
   return h('div', {
     style: {
       position: 'fixed', inset: 0, zIndex: 2147483647,
@@ -1582,87 +1671,7 @@ function ExportDialog({ items, onClose, showToast }) {
         borderRadius: 12, padding: '18px 20px 20px',
         boxShadow: '0 16px 48px rgba(0, 0, 0, .22)',
       },
-    },
-      h('div', { style: { display: 'flex', alignItems: 'center', marginBottom: 4 } },
-        h('h3', { style: { fontSize: 16, fontWeight: 600, margin: 0 } }, '导出待办记录'),
-        h('button', {
-          type: 'button', onClick: onClose,
-          style: {
-            marginLeft: 'auto', border: 'none', background: 'transparent', cursor: 'pointer',
-            color: 'var(--dsw-alias-label-secondary)', padding: 4, lineHeight: 0,
-          },
-          title: '关闭',
-        }, h(IconX, { size: 16 })),
-      ),
-      h('p', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', margin: '0 0 16px' } },
-        `共 ${stats.total} 条记录（未完成 ${stats.pending} / 已完成 ${stats.completed} / 已放弃 ${stats.abandoned}）。导出内容只包含这份清单，不含对话原文。`),
-
-      h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 6 } }, '导出成什么'),
-      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 } },
-        EXPORT_FORMATS.map((option) => h('label', {
-          key: option.id, style: cardStyle(format === option.id),
-        },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
-            h('input', {
-              type: 'radio', name: 'dsh-todo-export-format', value: option.id,
-              checked: format === option.id,
-              onChange: () => setFormat(option.id),
-              style: { margin: 0, accentColor: 'var(--dsw-alias-brand-primary, #f59e0b)' },
-            }),
-            h('span', { style: { fontSize: 13, fontWeight: 600 } }, option.label),
-          ),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)', paddingLeft: 20 } }, option.audience),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', paddingLeft: 20, lineHeight: 1.45 } }, option.hint),
-        )),
-      ),
-
-      h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 6 } }, '导出哪些'),
-      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
-        EXPORT_SCOPES.map((option) => h('button', {
-          key: option.id, type: 'button', onClick: () => setScope(option.id),
-          title: option.hint,
-          style: {
-            padding: '5px 12px', fontSize: 12, cursor: 'pointer', borderRadius: 999,
-            border: `1px solid ${scope === option.id ? 'var(--dsw-alias-brand-primary, #f59e0b)' : 'var(--dsw-alias-border-l2, #ddd)'}`,
-            background: scope === option.id
-              ? 'color-mix(in srgb, var(--dsw-alias-brand-primary, #f59e0b) 12%, transparent)'
-              : 'transparent',
-            color: scope === option.id
-              ? 'var(--dsw-alias-brand-primary, #f59e0b)'
-              : 'var(--dsw-alias-label-secondary)',
-          },
-        }, option.label)),
-      ),
-
-      h('div', {
-        style: {
-          display: 'flex', alignItems: 'center', gap: 10, marginTop: 18,
-          paddingTop: 14, borderTop: '1px solid var(--dsw-alias-border-l2, #eee)',
-        },
-      },
-        h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } },
-          `将导出 ${previewCount} 条 → ${formatItem.label}`),
-        h('button', {
-          type: 'button', onClick: onClose,
-          style: {
-            marginLeft: 'auto', padding: '7px 16px', fontSize: 13, cursor: 'pointer',
-            borderRadius: 6, border: '1px solid var(--dsw-alias-border-l2, #ddd)',
-            background: 'transparent', color: 'var(--dsw-alias-label-primary)',
-          },
-        }, '取消'),
-        h('button', {
-          type: 'button', onClick: run, disabled: busy || previewCount === 0,
-          style: {
-            padding: '7px 18px', fontSize: 13, fontWeight: 500, borderRadius: 6, border: 'none',
-            cursor: busy || previewCount === 0 ? 'not-allowed' : 'pointer',
-            background: 'var(--dsw-alias-brand-primary, #f59e0b)', color: '#fff',
-            opacity: busy || previewCount === 0 ? 0.55 : 1,
-          },
-        }, busy ? '导出中…' : '导出文件'),
-      ),
-      h('p', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', margin: '10px 0 0', lineHeight: 1.5 } },
-        '文件会下载到浏览器的默认下载目录。HTML 可直接双击打开、也能打印成 PDF；Excel 可用 Excel / WPS 打开；Markdown / CSV / JSON 适合贴给 AI 或导入其它工具。'),
-    ),
+    }, body),
   )
 }
 //#endregion
@@ -1676,8 +1685,6 @@ function TodoSidebar({ todosApi, sessionOpen, createFollowupSession }) {
   const [editingItem, setEditingItem] = useState(null)
   // v1.1.3 修复③：AI 总结在途标识（�?dock chip 同款徽标�
   const [aiPending, setAiPending] = useState(false)
-  // v1.5.0：导出对话框
-  const [exportOpen, setExportOpen] = useState(false)
   const aliveRef = useRef(true)
   const toastTimerRef = useRef(undefined)
   const panelRef = useRef(null)
@@ -1874,18 +1881,8 @@ function TodoSidebar({ todosApi, sessionOpen, createFollowupSession }) {
             marginRight: 2,
           },
         }, `预期 ${expectedCount} 项`) : null,
-        // v1.5.0：导出入口。放在头部右侧，点击不触发面板收起（stopPropagation）
-        h('button', {
-          type: 'button',
-          title: '导出全部待办（HTML / Markdown / Excel / CSV / JSON）',
-          onClick: (e) => { e.stopPropagation(); setExportOpen(true) },
-          style: {
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            border: 'none', background: 'transparent', cursor: 'pointer',
-            color: 'var(--dsw-alias-label-secondary)', padding: '2px 2px', marginRight: 2,
-            lineHeight: 0, borderRadius: 4, flexShrink: 0,
-          },
-        }, h(IconExport, { size: 14 })),
+        // v1.5.3：导出入口已从侧栏头部移除（用户要求「这个页面要简洁」）；
+        // 导出改到「设置 → 待办清单 → 导出」的折叠区，见 TodoSettingsPage。
         h('span', {
           style: {
             ...style.sidebarBadge,
@@ -1914,11 +1911,6 @@ function TodoSidebar({ todosApi, sessionOpen, createFollowupSession }) {
     settingsOpen ? h(SettingsPopup, {
       todosApi,
       onClose: () => setSettingsOpen(false),
-      showToast,
-    }) : null,
-    exportOpen ? h(ExportDialog, {
-      items,
-      onClose: () => setExportOpen(false),
       showToast,
     }) : null,
   )
@@ -1995,7 +1987,7 @@ h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'spac
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', { style: { fontSize: 16 } }, '📋'),
           h('span', { style: { fontSize: 15, fontWeight: 600 } }, '待办清单设置'),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.2'),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.3'),
         ),
         h('button', { type: 'button', onClick: onClose, style: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--dsh-alias-label-secondary)', padding: '4px 8px' } }, '×'),
       ),
@@ -2106,7 +2098,7 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
   const [collapsedGroups, setCollapsedGroups] = useState({}) // 折叠的分组 key→true
   const [aiDefaultReminder, setAiDefaultReminder] = useState('') // v1.1.2 AI 记录默认提醒时间
   const [sidebarEnabled, setSidebarEnabled] = useState(true) // v1.2.2 反馈⑤：左侧边栏显示开关
-  const [exportOpen, setExportOpen] = useState(false) // v1.5.0 导出对话框
+  const [exportExpanded, setExportExpanded] = useState(false) // v1.5.3 导出折叠区（弹窗改为设置页内联）
   const [toast, setToastState] = useState(null)
   // 发布加固：toast/已保存 的定时器统一挂 ref，组件卸载时清掉（以前裸 setTimeout 卸载后仍会 setState）。
   const uiTimerRef = useRef({ toast: undefined, saved: undefined })
@@ -2355,21 +2347,9 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
     // 头部（参考 dsh-archive-manager）
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '16px 0', borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)' } },
       h('h2', { style: { fontSize: 20, fontWeight: 600, margin: 0 } }, '待办清单'),
-      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.2'),
+      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.3'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 'auto' } }, 'GitHub'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/issues', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none' } }, '问题反馈'),
-      // v1.5.0：导出入口（放在头部，一眼能看到）
-      h('button', {
-        type: 'button',
-        onClick: () => setExportOpen(true),
-        title: '导出全部待办记录（HTML / Markdown / Excel / CSV / JSON）',
-        style: {
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          marginLeft: 12, padding: '4px 12px', fontSize: 12, cursor: 'pointer',
-          borderRadius: 6, border: '1px solid var(--dsw-alias-brand-primary, #f59e0b)',
-          background: 'transparent', color: 'var(--dsw-alias-brand-primary, #f59e0b)',
-        },
-      }, h(IconExport, { size: 13 }), '导出'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/releases', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 8 } }, '检查更新'),
     ),
     h('p', { style: { fontSize: 13, color: 'var(--dsw-alias-label-secondary)', margin: '8px 0 16px' } }, '划词加待办清单 · AI 总结 · 定时提醒'),
@@ -2440,6 +2420,36 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
       },
         AI_REMINDER_OPTIONS.map((opt) => h('option', { key: opt.value, value: opt.value }, opt.label)),
       ),
+    ),
+    // v1.5.3：导出折叠区（用户要求：侧栏保持简洁，导出放在设置详情页里可展开）
+    h('div', { style: { marginBottom: 14, border: '1px solid var(--dsw-alias-border-l2, #eee)', borderRadius: 10, overflow: 'hidden' } },
+      h('button', {
+        type: 'button',
+        onClick: () => setExportExpanded(!exportExpanded),
+        'aria-expanded': exportExpanded,
+        title: exportExpanded ? '收起导出' : '展开导出',
+        style: {
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+          padding: '10px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+          border: 'none', textAlign: 'left',
+          background: 'var(--dsw-alias-bg-layer-2, #f8f8f8)',
+          color: 'var(--dsw-alias-label-primary)',
+        },
+      },
+        h('span', { style: { ...style.sidebarChevron, transform: exportExpanded ? 'rotate(90deg)' : 'rotate(0deg)' } },
+          h(IconChevron, { size: 13 })),
+        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+          h(IconExport, { size: 14 }), '导出全部记录'),
+        h('span', { style: { marginLeft: 'auto', fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', fontWeight: 400 } },
+          `共 ${items.length} 条 · HTML / Markdown / Excel / CSV / JSON`),
+      ),
+      exportExpanded ? h('div', {
+        style: {
+          padding: '14px 14px 16px',
+          borderTop: '1px solid var(--dsw-alias-border-l2, #eee)',
+          background: 'var(--dsw-alias-bg-layer-1, #fff)',
+        },
+      }, h(ExportDialog, { items, onClose: undefined, showToast, inline: true })) : null,
     ),
     // tab 切换（参考 dsh-archive-manager）
     h('div', { style: { display: 'flex', borderBottom: '2px solid var(--dsw-alias-border-l2, #eee)', marginBottom: 12 } },
@@ -2635,12 +2645,7 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
         onConverted: () => { void refresh() },
         showToast,
       }) : null,
-      // v1.5.0 导出对话框（设置页内也能导出，范围可选）
-      exportOpen ? h(ExportDialog, {
-        items,
-        onClose: () => setExportOpen(false),
-        showToast,
-      }) : null,
+      // v1.5.3：导出改为设置页内联折叠区（v1.5.0 的弹窗出口已移除）
       // v1.2.5 修复"设置页↗点击没反应"：showToast 只 setToast 但渲染树无出口——
       // 补上 toast 渲染（fixed 定位浮层，与侧栏同款样式）
       toast !== null ? h('div', { style: { ...style.toast, position: 'fixed', right: 20, bottom: 12, zIndex: 2147483646, pointerEvents: 'none' } }, toast) : null,

@@ -259,7 +259,7 @@ dsh-todo-checklist/
 
 ## 📝 Changelog · 更新日志
 
-见 [CHANGELOG.md](./CHANGELOG.md)。近期：**1.5.2** 修正 `todo_list` 把已放弃记录渲染成未勾选项的问题；**1.5.1** 修复插件重载后待办不可读（存储域 already-open）；**1.5.0** 新增导出（HTML / Markdown / Excel / CSV / JSON）与 `todo_export` 工具。
+见 [CHANGELOG.md](./CHANGELOG.md)。近期：**1.5.3** 把导出从侧栏移到设置页的可折叠区；**1.5.2** 修正 `todo_list` 把已放弃记录渲染成未勾选项的问题；**1.5.1** 修复插件重载后待办不可读（存储域 already-open）；**1.5.0** 新增导出（HTML / Markdown / Excel / CSV / JSON）与 `todo_export` 工具。
 
 ---
 

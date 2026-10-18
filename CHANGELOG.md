@@ -3,6 +3,20 @@
 本插件遵循语义化版本：`主版本.次版本.修订号`。
 早期版本（0.x）为内部迭代，自 `1.0.0` 起面向使用者记录。
 
+## 1.5.3 — 2026-10-19
+
+侧栏回归简洁，导出搬进设置页并改成可折叠的一块。
+
+### 变更
+- **侧栏去掉导出按钮**：上一版把导出图标塞在「待办清单」标题行里，在 254px 宽的侧栏里把标题挤成两行、和「预期 N 项 / 待完成 N」抢位置。现在头部只留折叠箭头、标题、预期胶囊和完成数。
+- **导出改为设置页内联折叠区**：在「设置 → 待办清单」里，位于 AI 默认提醒时间与状态标签页之间。收起时只有一行「⤓ 导出全部记录 · 共 N 条 · HTML / Markdown / Excel / CSV / JSON」，点开才展开格式卡片、范围筛选和「导出文件」按钮。默认收起，不占版面。
+- **导出表单两种宿主共用一份实现**：`ExportDialog` 增加 `inline` 模式，弹窗与内联渲染同一棵组件树，格式/范围/校验规则不会各写一套而漂移。
+
+### English
+- **Export button removed from the sidebar**: it was wedged into the "Todo Checklist" title row, squeezing the title onto two lines in a 254px sidebar and competing with the expected/remaining badges. The header is back to chevron + title + expected count + remaining count.
+- **Export moved into the settings page as a collapsible section**, between the AI default reminder time and the status tabs. Collapsed it is a single line ("⤓ Export all records · N items · HTML / Markdown / Excel / CSV / JSON"); expanded it reveals the format cards, the scope filter and the export button. Collapsed by default.
+- **One implementation, two hosts**: `ExportDialog` gained an `inline` mode, so the modal and the inline section render the same tree — format, scope and validation rules cannot drift apart.
+
 ## 1.5.2 — 2026-10-19
 
 修正 `todo_list` 对「已放弃」记录的标记：此前把它渲染成未勾选的 `[ ]`，模型转述时会当成「还没做」。
