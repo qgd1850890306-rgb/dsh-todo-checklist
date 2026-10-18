@@ -257,7 +257,7 @@ dsh-todo-checklist/
 
 ## 📝 Changelog · 更新日志
 
-见 [CHANGELOG.md](./CHANGELOG.md)。近期：**1.5.0** 新增导出（HTML / Markdown / Excel / CSV / JSON）与 `todo_export` 工具；**1.4.0** 机器人推送与转定时任务通用化。
+见 [CHANGELOG.md](./CHANGELOG.md)。近期：**1.5.1** 修复插件重载后待办不可读（存储域 already-open）；**1.5.0** 新增导出（HTML / Markdown / Excel / CSV / JSON）与 `todo_export` 工具。
 
 ---
 

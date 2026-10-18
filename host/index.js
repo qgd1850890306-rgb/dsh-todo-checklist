@@ -281,6 +281,77 @@ function createService(ctx) {
   }
 
   let domainError
+  /** 该句柄是否由本实例 open 出来（决定卸载时要不要 close；沿用他人句柄不关，避免误伤并发实例）。 */
+  let ownsDomain = false
+
+  /**
+   * v1.5.1 修复（0.2.x 新框架报错）：DomainFacility 按 name 记名（reserved 集合），
+   * 只有 Domain.close() 才释放。插件 fiber 被销毁后重新 apply（宿主热重载 / 配置变更 /
+   * 窗口重开触发重新激活）时，上一实例的域仍占着该 name → 新实例 open() 抛
+   * `already-open`，此后**所有读写永久失败**（用户看到「存储不可用」）。
+   * 官方契约是「谁 open 谁 close」，这里在 apply 内同步注册 disposer 释放句柄。
+   */
+  const closeDomain = () => {
+    const handle = domain
+    const owned = ownsDomain
+    domain = undefined
+    domainPromise = undefined
+    ownsDomain = false
+    if (handle === undefined || !owned) return Promise.resolve()
+    // 必须 await：disposer 返回 promise 时宿主会等它完成，句柄才真从设施上摘掉。
+    // Domain.close() 本身幂等（facility 卸载时的 closeAll 再关一次也无害）。
+    try { return Promise.resolve(handle.close?.()) } catch (error) { return Promise.resolve(error) }
+  }
+
+  /** 复用设施上「同名且仍打开」的域（上一实例遗留的句柄）；没有则返回 undefined。 */
+  const adoptDomain = () => {
+    let existing
+    try { existing = ctx.storageDomain?.get?.(todoDomainSpec.name) } catch { }
+    if (existing === undefined || existing.closed === true) return undefined
+    return existing
+  }
+
+  const adopt = (handle, diag) => {
+    domain = handle
+    ownsDomain = false
+    domainError = undefined
+    appendDiag(diag)
+    return handle
+  }
+
+  /** 真正拿句柄：先复用设施上的同名域，再 open；already-open 时短暂轮询等待并发 open 落地。 */
+  const openDomain = async () => {
+    const reused = adoptDomain()
+    if (reused !== undefined) return adopt(reused, { domainReused: true })
+    try {
+      const handle = await ctx.storageDomain.open(todoDomainSpec)
+      domain = handle
+      ownsDomain = true
+      domainError = undefined
+      // v1.3.0：容错解析有抢救动作时留痕（哪几类坏数据被丢/被补，便于用户反馈时定位）
+      if (tolerantStats.droppedItems > 0 || tolerantStats.repairedItems > 0 || tolerantStats.repairedConfig) {
+        appendDiag({ tolerantParse: { ...tolerantStats } })
+        try {
+          console.warn(`[dsh-todo] 存储容错解析：丢弃 ${tolerantStats.droppedItems} 条、修复 ${tolerantStats.repairedItems} 条待办；配置修复=${tolerantStats.repairedConfig}`)
+        } catch { }
+      }
+      return handle
+    } catch (error) {
+      if (error?.code === 'already-open') {
+        // 并发 open 的瞬间：另一实例的 reserved 已占位、domains 还没写入，等它落地后沿用。
+        for (let i = 0; i < 8; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 150))
+          const late = adoptDomain()
+          if (late !== undefined) return adopt(late, { domainReused: true, waitedMs: (i + 1) * 150 })
+        }
+      }
+      domainError = error
+      appendDiag({ domainOpenError: messageOf(error) })
+      try { ctx.logger?.warn?.(`[dsh-todo] 打开存储域失败：${messageOf(error)}`) } catch { }
+      return undefined
+    }
+  }
+
   /**
    * v1.3.0 发布加固：存储域打不开（文件损坏 / 旧版数据与 schema 不符 / 介质不可用）时
    * **绝不把异常抛进激活路径**——0.2.x 起宿主 fail-closed：任一插件激活失败会拒绝整个 web boot。
@@ -288,29 +359,22 @@ function createService(ctx) {
    * 插件其余部分（工具注册、UI 槽位）照常加载，用户看到「存储不可用」而不是整个 DSH 起不来。
    */
   const ensureDomain = async () => {
-    if (domain !== undefined) return domain
+    if (domain !== undefined) {
+      // 句柄被外部关掉（facility 卸载 / 另一实例 closeAll）→ 重新打开，自愈而不是永久失败。
+      if (domain.closed === true) {
+        domain = undefined
+        domainPromise = undefined
+        ownsDomain = false
+      } else {
+        return domain
+      }
+    }
     if (domainPromise === undefined) {
-      domainPromise = ctx.storageDomain.open(todoDomainSpec).then(
-        (handle) => {
-          domain = handle
-          domainError = undefined
-          // v1.3.0：容错解析有抢救动作时留痕（哪几类坏数据被丢/被补，便于用户反馈时定位）
-          if (tolerantStats.droppedItems > 0 || tolerantStats.repairedItems > 0 || tolerantStats.repairedConfig) {
-            appendDiag({ tolerantParse: { ...tolerantStats } })
-            try {
-              console.warn(`[dsh-todo] 存储容错解析：丢弃 ${tolerantStats.droppedItems} 条、修复 ${tolerantStats.repairedItems} 条待办；配置修复=${tolerantStats.repairedConfig}`)
-            } catch { }
-          }
-          return handle
-        },
-        (error) => {
-          domainError = error
-          domainPromise = undefined // 允许后续调用重试（例如用户手工修好存储文件后）
-          appendDiag({ domainOpenError: messageOf(error) })
-          try { ctx.logger?.warn?.(`[dsh-todo] 打开存储域失败：${messageOf(error)}`) } catch { }
-          return undefined
-        },
-      )
+      domainPromise = openDomain().then((handle) => {
+        // 失败不缓存：允许后续调用重试（例如用户手工修好存储文件后）
+        if (handle === undefined) domainPromise = undefined
+        return handle
+      })
     }
     return domainPromise
   }
@@ -1254,6 +1318,14 @@ function createService(ctx) {
     writable: false,
     value: { service, serviceKey: 'todos', namespace: 'todos' },
   })
+  // 存储域释放钩子：apply 里同步注册的 disposer 要能拿到它（cross-scope，故挂在服务上）。
+  // 不加枚举，Typert 网关按 members 清单走，不会把它暴露成远程方法。
+  Object.defineProperty(service, 'disposeDomain', {
+    configurable: true,
+    enumerable: false,
+    writable: false,
+    value: closeDomain,
+  })
   return service
 }
 
@@ -1381,6 +1453,10 @@ export function apply(ctx) {
       ].join('\n')
     },
   })), 'todo-sidecar: tool todo_export')
+
+  // 存储域生命周期：0.2.x 契约「谁 open 谁 close」。不在这里释放，fiber 重建后同名 open
+  // 会一直抛 already-open（v1.5.1 修复的真实故障）。必须同步注册，不能放在 await 之后。
+  ctx.effect(() => () => service.disposeDomain?.(), 'todo-sidecar: storage domain')
 
   ctx.effect(() => ctx.systemPrompt.section({
     name: 'plugin:todo-sidecar',

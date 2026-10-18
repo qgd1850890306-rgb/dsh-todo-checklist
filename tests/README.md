@@ -36,7 +36,18 @@ node schema-tolerance.mjs
 （未知键、缺标题、单条彻底损坏、config 坏字段、items 变成 null/对象/JSON 字符串…）跑
 `todoDomainSpec.global.schema`，确认「单条坏只丢一条、字段坏只丢字段」。期望 `14/14 PASS`。
 
-## 4. 发布包核验（23 项）
+## 4. 存储域生命周期（11 项）
+
+```powershell
+node domain-reload.mjs
+```
+
+复刻 0.2.x `DomainFacility` 的 `reserved` 语义（按 name 记名，只有 `close()` 才释放），验证
+v1.5.1 修的那个真实故障：插件重载后 `open()` 抛 `already-open` → 待办列表整体不可读。覆盖
+apply→dispose→再 apply、上一实例遗留未关闭的域被沿用（不抢不关）、并发 open 未落地时轮询后
+沿用、句柄被设施 `closeAll` 后自动重开自愈、以及诊断留痕。期望 `11/11 PASS`。
+
+## 5. 发布包核验（29 项）
 
 ```powershell
 node verify-release.cjs
@@ -46,9 +57,9 @@ node verify-release.cjs
 `cordis.patch.yml` 的 `name:` 已改写 / 客户端产物注册 id 等于包名且无旧 id / 无乱码 U+FFFD /
 关键文案在位 / 宿主无个人绝对路径 / 诊断默认关闭 / 跨宿主认领函数在 / `inject` 三项 /
 存储 schema 无 `.strict()` 且抢救函数在 / 客户端工厂可执行且导出 `TYPERT_REMOTE,apply,inject`。
-期望 `23 PASS / 0 FAIL`。
+期望 `29 PASS / 0 FAIL`。
 
-## 5. 乱码残留扫描（E-33 中毒后遗症）
+## 6. 乱码残留扫描（E-33 中毒后遗症）
 
 ```powershell
 node scan-fffd.cjs                                # 默认扫 ../dsh-todo/client-src/index.js
@@ -69,6 +80,7 @@ cd ..\tests
 node mk-bundle-e2e.mjs; node host-e2e-bundle.mjs
 $env:DSH_TODO_PLUGIN_DIR='..\release\dsh-todo-checklist'; node host-e2e-bundle.mjs; Remove-Item Env:\DSH_TODO_PLUGIN_DIR
 node schema-tolerance.mjs
+node domain-reload.mjs
 node verify-release.cjs
 node scan-fffd.cjs
 ```

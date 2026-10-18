@@ -3,6 +3,18 @@
 本插件遵循语义化版本：`主版本.次版本.修订号`。
 早期版本（0.x）为内部迭代，自 `1.0.0` 起面向使用者记录。
 
+## 1.5.1 — 2026-10-19
+
+修复一个会让待办列表**整体读不出来**的存储生命周期缺陷（升级后建议重启一次 DSH）。
+
+### 修复
+- **插件重载后待办不可读**：现象是侧栏空掉、`todo_list` 一直报 `存储不可用（待办数据无法读写）：domain 'dsh_todo_sidecar_items' is already open`，重启才能恢复。根因是存储域「只开不关」——宿主在插件重载（改配置、重挂载、窗口重开）时会重建插件，上一实例仍占着域名的登记位，新实例 `open()` 直接抛 `already-open`，而失败又被缓存成一等一的不可用。现在按官方契约「谁 open 谁 close」在卸载时释放句柄；同时补两条自愈路径：设施上已有同名域就沿用（不抢不关），句柄被外部关闭则自动重开。数据文件本身从未受损。
+- **域打开失败不再静默**：`DSH_TODO_DEBUG=1` 时，沿用路径记 `domainReused`、真失败记 `domainOpenError`，便于反馈时定位。
+
+### English
+- **Fixed the todo list becoming unreadable after a plugin reload**: the storage domain was opened lazily but never closed, so once the host re-created the plugin fiber the next `open()` threw `already-open` and every read failed until a restart. The handle is now released on dispose per the "who opens, closes" contract, with two self-healing paths: adopt an existing domain instead of racing for it, and re-open automatically if the handle was closed underneath. The stored data was never damaged.
+- **Domain-open failures are no longer silent**: with `DSH_TODO_DEBUG=1`, adopting a domain logs `domainReused` and a real failure logs `domainOpenError`.
+
 ## 1.5.0 — 2026-10-19
 
 新增导出功能（五种格式、五种范围），并适配 DSH `0.2.1-rc.2` 与 0.2 世代插件规范。
