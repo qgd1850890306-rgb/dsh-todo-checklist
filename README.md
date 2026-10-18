@@ -129,38 +129,40 @@ Ask the model to "export all my todos as Markdown" and it returns the text direc
 - **DSH** `>= 0.2.0-rc.1`. Tested on `0.2.0-rc.1`, `0.2.0-rc.2`, **`0.2.1-rc.2`**.
 - **Node.js** `^22.19.0 || >=24.0.0` (declared in `engines`; the desktop runtime ships Node 24).
 - Desktop or Web — the client face declares `platform: web`.
-- **Zero runtime dependencies.** The host face is pre-bundled into self-contained files (`lib/host.js`, `lib/typert.js`, zod inlined). There is nothing to download at install time, so `link:`, offline, tarball and npm installs all behave identically.
+- **Zero runtime dependencies.** The host face is pre-bundled into self-contained files (`lib/host.js`, `lib/typert.js`, zod inlined). There is nothing to download at install time, so `link:`, offline and tarball installs all behave identically.
 
 ---
 
 ## 📦 Install · 安装
 
-**Option 1 — Plugin manager (recommended)**
+> **Not on npm yet.** The package is distributed through GitHub only, so `dsh plugin add dsh-todo-checklist`
+> (bare package name) will fail with `404 Not Found`. Use one of the two commands below.
 
-DSH sidebar → **Plugins** → **Add plugin** → enter `dsh-todo-checklist` → **fully quit and restart DSH** afterwards.
-
-**Option 2 — Command line**
-
-```bash
-dsh plugin --profile desktop add dsh-todo-checklist
-```
-
-**Option 3 — Straight from GitHub** (the built `lib/` is committed, so no build step is needed)
+**Option 1 — GitHub (recommended, one line)**
 
 ```bash
 dsh plugin --profile desktop add https://github.com/qgd1850890306-rgb/dsh-todo-checklist.git
 ```
 
-**Option 4 — Local directory or tarball** (offline / intranet)
+The built `lib/` is committed, so nothing is compiled at install time — no `allowBuilds` prompt, no toolchain needed.
+
+**Option 2 — Local directory or tarball** (offline / intranet)
 
 ```bash
 dsh plugin --profile desktop add <absolute path to directory or .tgz>
 ```
 
-Upgrade / uninstall:
+**Via the UI**: **Plugins** → **Add plugin** → paste the GitHub URL above (the same string as Option 1).
+
+**Upgrade** — re-add from the same GitHub URL; the newest `main` is fetched:
 
 ```bash
-dsh plugin --profile desktop add dsh-todo-checklist@latest
+dsh plugin --profile desktop add https://github.com/qgd1850890306-rgb/dsh-todo-checklist.git
+```
+
+**Uninstall**:
+
+```bash
 dsh plugin --profile desktop remove dsh-todo-checklist
 ```
 

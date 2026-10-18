@@ -129,38 +129,40 @@ todo_export({ format: "md" | "csv" | "json" | "html", scope: "all" | "pending" |
 - **DSH** `>= 0.2.0-rc.1`，已测 `0.2.0-rc.1`、`0.2.0-rc.2`、**`0.2.1-rc.2`**。
 - **Node.js** `^22.19.0 || >=24.0.0`（`engines` 里声明；桌面端运行时自带 Node 24）。
 - 桌面端或 Web 端均可 —— 客户端面声明 `platform: web`。
-- **零运行时依赖**：宿主面已预打包成自包含文件（`lib/host.js`、`lib/typert.js`，zod 已内联）。安装时不需要下载任何东西，所以 `link:`、离线、tarball、npm 四种装法表现完全一致。
+- **零运行时依赖**：宿主面已预打包成自包含文件（`lib/host.js`、`lib/typert.js`，zod 已内联）。安装时不需要下载任何东西，所以 `link:`、离线、tarball 三种装法表现完全一致。
 
 ---
 
 ## 📦 Install · 安装
 
-**方式一 —— 插件管理器（推荐）**
+> **这个包没有发布到 npm。** 它只通过 GitHub 分发，所以直接 `dsh plugin add dsh-todo-checklist`
+> （只写包名）会报 `404 Not Found`。请用下面两条命令之一。
 
-DSH 左侧栏 → **插件** → **添加插件** → 填 `dsh-todo-checklist` → 装完**完全退出并重启 DSH**。
-
-**方式二 —— 命令行**
-
-```bash
-dsh plugin --profile desktop add dsh-todo-checklist
-```
-
-**方式三 —— 直接从 GitHub 装**（构建好的 `lib/` 已入库，不需要构建步骤）
+**方式一 —— 从 GitHub 装（推荐，一行命令）**
 
 ```bash
 dsh plugin --profile desktop add https://github.com/qgd1850890306-rgb/dsh-todo-checklist.git
 ```
 
-**方式四 —— 本地目录或 tarball**（离线 / 内网）
+构建好的 `lib/` 已在仓库里，安装时不需要编译 —— 不会弹 `allowBuilds` 授权，也不需要本地工具链。
+
+**方式二 —— 本地目录或 tarball**（离线 / 内网）
 
 ```bash
 dsh plugin --profile desktop add <本地目录或 .tgz 的绝对路径>
 ```
 
-升级 / 卸载：
+**在界面上装**：**插件** → **添加插件** → 粘贴上面那条 GitHub URL（和方式一同一串）。
+
+**升级** —— 用同一个 GitHub URL 再装一次，会拉最新的 `main`：
 
 ```bash
-dsh plugin --profile desktop add dsh-todo-checklist@latest
+dsh plugin --profile desktop add https://github.com/qgd1850890306-rgb/dsh-todo-checklist.git
+```
+
+**卸载**：
+
+```bash
 dsh plugin --profile desktop remove dsh-todo-checklist
 ```
 
