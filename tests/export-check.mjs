@@ -74,11 +74,39 @@ mkdirSync(outDir, { recursive: true })
 // ── 纯函数 ──
 check('filterByScope 全部/未完成/已完成/已放弃/逾期', () => {
   assert.equal(mod.filterByScope(items, 'all', now).length, 6)
+  assert.equal(mod.filterByScope(items, undefined, now).length, 6)
+  assert.equal(mod.filterByScope(items, [], now).length, 6)
   assert.equal(mod.filterByScope(items, 'pending', now).length, 4)
   assert.equal(mod.filterByScope(items, 'done', now).length, 1)
   assert.equal(mod.filterByScope(items, 'abandoned', now).length, 1)
   assert.equal(mod.filterByScope(items, 'overdue', now).length, 1)
   assert.deepEqual(mod.filterByScope(items, 'overdue', now).map((i) => i.id), ['a2'])
+})
+
+check('filterByScope 多选取并集（逾期是未完成的子集，不重复计数）', () => {
+  // 未完成 4 条里含逾期 1 条；两个都选仍是 4 条
+  const pendingPlusOverdue = mod.filterByScope(items, ['pending', 'overdue'], now)
+  assert.equal(pendingPlusOverdue.length, 4)
+  assert.equal(new Set(pendingPlusOverdue.map((i) => i.id)).size, 4)
+  // 未完成 + 已完成 = 5 条
+  assert.equal(mod.filterByScope(items, ['pending', 'done'], now).length, 5)
+  // 全部四个范围 = 全部条目
+  assert.equal(mod.filterByScope(items, ['pending', 'overdue', 'done', 'abandoned'], now).length, 6)
+  // 未知 id 被忽略，不会误伤
+  assert.equal(mod.filterByScope(items, ['nope'], now).length, 6)
+})
+
+check('normalizeScopes / scopeLabelOf / scopeSlugOf', () => {
+  assert.deepEqual(mod.normalizeScopes(undefined), [])
+  assert.deepEqual(mod.normalizeScopes('all'), [])
+  assert.deepEqual(mod.normalizeScopes('pending'), ['pending'])
+  // 顺序固定为 EXPORT_SCOPES 的顺序（pending → overdue → done → abandoned）
+  assert.deepEqual(mod.normalizeScopes(['done', 'pending']), ['pending', 'done'])
+  assert.deepEqual(mod.normalizeScopes(['done', 'nope', 'pending']), ['pending', 'done'])
+  assert.equal(mod.scopeLabelOf([]), '全部记录')
+  assert.equal(mod.scopeLabelOf(['pending', 'overdue']), '未完成 + 逾期')
+  assert.equal(mod.scopeSlugOf([]), 'all')
+  assert.equal(mod.scopeSlugOf(['pending', 'overdue']), 'pending-overdue')
 })
 
 check('summarizeExport 统计口径', () => {
@@ -313,10 +341,31 @@ check('buildExportFile 范围生效 + 未知值回落默认', () => {
   assert.ok(pending.text.includes('## 未完成（4）'))
   assert.ok(!pending.text.includes('## 已完成（1）'))
 
+  // 多选：文件名用短横线拼，范围文案用「+」拼
+  const multi = mod.buildExportFile(items, { format: 'md', scopes: ['pending', 'overdue'], now })
+  assert.equal(multi.count, 4)
+  assert.ok(multi.filename.includes('-pending-overdue.'), `多选文件名不对：${multi.filename}`)
+  assert.equal(multi.scopeLabel, '未完成 + 逾期')
+  assert.deepEqual(multi.scopes, ['pending', 'overdue'])
+
   const bogus = mod.buildExportFile(items, { format: 'nope', scope: 'nope', now })
   assert.equal(bogus.format, 'html')
   assert.equal(bogus.count, 6)
   assert.ok(bogus.filename.endsWith('-all.html'))
+})
+
+check('HTML 只渲染范围内的分组，不出现「已完成（0）」这类空节', () => {
+  // 走真实入口：先按范围过滤，再渲染。直接喂 buildHtml 全量记录测不到这个缺陷。
+  const scoped = mod.buildExportFile(items, { format: 'html', scopes: ['pending'], now })
+  const headings = [...scoped.text.matchAll(/<h2[^>]*>([^<]*)<\/h2>/gu)].map((m) => m[1])
+  assert.deepEqual(headings, ['未完成（4）'], `空分组没跳过：${JSON.stringify(headings)}`)
+  assert.ok(!scoped.text.includes('这一组没有记录'), '不该出现空组占位')
+  assert.ok(!scoped.text.includes('已完成（0）') && !scoped.text.includes('已放弃（0）'))
+
+  // 一份记录都没有时才给全局提示
+  const empty = mod.buildHtml([], { now, scopeLabel: '已完成' })
+  assert.ok(empty.includes('本次导出范围内没有记录'), '空导出缺提示')
+  assert.equal([...empty.matchAll(/<h2/gu)].length, 0, '空导出不该有分组标题')
 })
 
 check('空数据导出不会崩', () => {

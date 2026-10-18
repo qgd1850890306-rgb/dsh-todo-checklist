@@ -1335,7 +1335,7 @@ const PROMPT_SECTION = [
   '- 当用户提出需要后续跟进的事项、任务、提醒或承诺（例如「记一下」「提醒我」「周五前要」「列入待办」），调用 todo_add 写入；title 用一句简洁标题，content 放详情，source 传 "model"。',
   '- 用户提到截止期限（如「周五前」「9月30日」）时，把可解析的日期写进 dueAt 参数（ISO 格式优先，如 2026-09-30）。',
   '- 用户询问当前有哪些待办时，调用 todo_list 并按简短列表转述；有期限的条目优先说明。',
-  '- 用户要求「导出/备份/汇总全部待办」时，调用 todo_export（默认 Markdown）；需要表格给 Excel 用时让用户在「待办清单」设置页点「导出」选 Excel。',
+  '- 用户要求「导出/备份/汇总全部待办」时，调用 todo_export（默认 Markdown）；可传 scope 多选范围（如 ["pending","overdue"]）取并集；需要表格给 Excel 用时让用户在「待办清单」设置页点「导出」选 Excel。',
   '- 纯问答、闲聊、以及当前回合内即可完成的小请求不要写入待办；同一事项不要重复写入。',
 ].join('\n')
 
@@ -1423,7 +1423,7 @@ export function apply(ctx) {
 
   ctx.effect(() => ctx.tools.register(defineTool({
     name: 'todo_export',
-    description: 'Export the user\'s todo records as text. 导出用户全部待办记录（默认 Markdown，可直接阅读或贴进上下文）。format 可选 md / csv / json / html；xlsx 为二进制、请让用户在界面上导出。',
+    description: 'Export the user\'s todo records as text. 导出用户全部待办记录（默认 Markdown，可直接阅读或贴进上下文）。format 可选 md / csv / json / html；scope 可传多个范围取并集；xlsx 为二进制、请让用户在界面上导出。',
     parameters: {
       format: {
         type: 'string',
@@ -1431,9 +1431,12 @@ export function apply(ctx) {
         description: 'Text format. 文本格式：md（默认，最省 token）/ csv / json / html。',
       },
       scope: {
-        type: 'string',
-        enum: ['all', 'pending', 'done', 'abandoned', 'overdue'],
-        description: 'Which records. 导出范围：all（默认，全部记录）/ pending / done / abandoned / overdue。',
+        // 工具参数 DSL 不接受 type 数组，字符串与字符串数组只能写成 oneOf 两个分支。
+        oneOf: [
+          { type: 'string', enum: ['all', 'pending', 'overdue', 'done', 'abandoned'] },
+          { type: 'array', items: { type: 'string', enum: ['pending', 'overdue', 'done', 'abandoned'] } },
+        ],
+        description: 'Which records. 导出范围：省略或 all = 全部记录；也可传数组多选（如 ["pending","overdue"]），取并集。pending 已含逾期，两者同选不会重复。',
       },
     },
     output: {
@@ -1450,14 +1453,14 @@ export function apply(ctx) {
       if (format === 'xlsx') {
         return 'Excel 是二进制格式，无法作为文本返回；请让用户在「待办清单」设置页点击「导出」并选择 Excel。'
       }
-      const scope = typeof args?.scope === 'string' && args.scope !== '' ? args.scope : 'all'
-      const result = buildExportFile(items, { format, scope })
+      const scope = args?.scope === undefined || args.scope === '' ? 'all' : args.scope
+      const result = buildExportFile(items, { format, scopes: scope })
       if (!isTextExport(result)) {
         return '该格式为二进制，无法直接返回；请改用 md / csv / json，或让用户在界面上导出。'
       }
       const stats = summarizeExport(items)
       return [
-        `已导出 ${result.count} 条记录（全部 ${stats.total} 条：未完成 ${stats.pending} / 已完成 ${stats.completed} / 已放弃 ${stats.abandoned}），文件名 ${result.filename}。`,
+        `已导出 ${result.count} 条记录（范围：${result.scopeLabel}；全部 ${stats.total} 条：未完成 ${stats.pending} / 已完成 ${stats.completed} / 已放弃 ${stats.abandoned}），文件名 ${result.filename}。`,
         '',
         result.text,
       ].join('\n')

@@ -3,6 +3,25 @@
 本插件遵循语义化版本：`主版本.次版本.修订号`。
 早期版本（0.x）为内部迭代，自 `1.0.0` 起面向使用者记录。
 
+## 1.5.4 — 2026-10-19
+
+### 改进
+
+- **导出范围支持多选**：未完成 / 逾期 / 已完成 / 已放弃 可以任意勾选若干个，取并集。此前是单选，选「未完成」就选不了「逾期」。现在一条都不选就是全部记录，所以去掉了「全部记录 / 仅未完成」这类单选项。
+- 导出的文件名与说明文案会带上实际范围，如 `dsh-todo-20261019-0140-pending-overdue.md`、`将导出 6 条（未完成 + 逾期）→ HTML 网页`。`todo_export` 工具的 `scope` 参数同样可以传数组。
+
+### 修复
+
+- **去掉格式卡片上的「给人看 / 给 AI 看」那一行**：五种格式的名称和说明已经说清楚了，这行字是重复信息，占位置还增加阅读负担。说明文字改为紧贴格式名下方。
+- **只选部分范围时，HTML 不再渲染空分组**：此前选「未完成 + 逾期」导出，文件里仍会出现「已完成（0）」「已放弃（0）」两节，容易被误读成全局就是 0 条。现在空分组直接不渲染，一份记录都没有时才显示「本次导出范围内没有记录。」
+
+### English
+
+- **Multi-select export scope**: pick any combination of pending / overdue / completed / abandoned; the export unions them. Previously it was single-select, so choosing "pending" made "overdue" unavailable. Selecting nothing means all records, so the "all records / pending only" radio options are gone.
+- The export filename and the summary line now carry the actual scope, e.g. `dsh-todo-20261019-0140-pending-overdue.md` and `Exporting 6 records (Pending + Overdue) → HTML`. The `todo_export` tool's `scope` parameter accepts an array as well.
+- **Dropped the "for humans / for AI" caption on each format card**: the format name and its one-line description already say what it is; that extra line was redundant. The hint now sits directly under the format name.
+- **Empty groups are no longer rendered in the HTML export**: exporting "pending + overdue" used to still print "Completed (0)" and "Abandoned (0)" sections, which read like the whole list was empty. Empty groups are now skipped; only a genuinely empty export shows "No records in this export scope."
+
 ## 1.5.3 — 2026-10-19
 
 侧栏回归简洁，导出搬进设置页并改成可折叠的一块。

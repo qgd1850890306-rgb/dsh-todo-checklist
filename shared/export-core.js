@@ -28,47 +28,46 @@ export const EXPORT_FORMATS = [
     id: 'html',
     label: 'HTML 网页',
     ext: 'html',
-    audience: '给人看',
     hint: '单个网页文件，双击就能在浏览器打开，也能直接打印成 PDF',
   },
   {
     id: 'md',
     label: 'Markdown',
     ext: 'md',
-    audience: '给人看 / 给 AI 看',
     hint: '纯文本带标题和勾选框，可粘进笔记软件，也可整段贴给 AI',
   },
   {
     id: 'xlsx',
     label: 'Excel 表格',
     ext: 'xlsx',
-    audience: '给人看',
     hint: '真正的 .xlsx，可用 Excel / WPS 打开，能筛选和排序',
   },
   {
     id: 'csv',
     label: 'CSV 表格',
     ext: 'csv',
-    audience: '给 AI 看',
     hint: '通用的表格纯文本，任何工具都能读，适合喂给 AI',
   },
   {
     id: 'json',
     label: 'JSON 数据',
     ext: 'json',
-    audience: '给 AI 看',
     hint: '完整字段的结构化数据，字段最全，适合程序或 AI 精确解析',
   },
 ]
 
-/** 可选导出范围 */
+/**
+ * 可选导出范围。可多选，多条之间取并集；一条都不选 = 全部记录。
+ * 「未完成」已经包含逾期的条目，「逾期」是它的子集，两个都选不会重复。
+ */
 export const EXPORT_SCOPES = [
-  { id: 'all', label: '全部记录', hint: '未完成 + 已完成 + 已放弃' },
-  { id: 'pending', label: '仅未完成', hint: '只看还没做完的' },
-  { id: 'done', label: '仅已完成', hint: '已勾选完成的' },
-  { id: 'abandoned', label: '仅已放弃', hint: '主动放弃的条目' },
-  { id: 'overdue', label: '仅逾期', hint: '未完成且已过提醒时间' },
+  { id: 'pending', label: '未完成', hint: '还没做完的（含逾期）' },
+  { id: 'overdue', label: '逾期', hint: '未完成且已过提醒时间' },
+  { id: 'done', label: '已完成', hint: '已勾选完成的' },
+  { id: 'abandoned', label: '已放弃', hint: '主动放弃的条目' },
 ]
+
+const SCOPE_IDS = EXPORT_SCOPES.map((scope) => scope.id)
 //#endregion
 
 //#region 时间与文本工具
@@ -159,22 +158,54 @@ function linkify(text) {
 //#endregion
 
 //#region 筛选与统计
-/** 按范围筛条目（不改变原数组） */
-export function filterByScope(items, scope = 'all', now = Date.now()) {
-  const list = Array.isArray(items) ? items : []
-  switch (scope) {
-    case 'pending':
-      return list.filter((item) => item?.status === 'pending')
-    case 'done':
-      return list.filter((item) => item?.status === 'completed')
-    case 'abandoned':
-      return list.filter((item) => item?.status === 'abandoned')
-    case 'overdue':
-      return list.filter((item) => isOverdueItem(item, now))
-    case 'all':
-    default:
-      return list.slice()
+/**
+ * 把一个范围值归一成 id 数组。
+ * 兼容三种输入：`undefined`/`'all'`（= 全部）、单个 id 字符串（旧调用方）、id 数组。
+ * @returns {string[]} 空数组表示「全部」
+ */
+export function normalizeScopes(scopes) {
+  if (scopes === undefined || scopes === null || scopes === 'all') return []
+  const raw = Array.isArray(scopes) ? scopes : [scopes]
+  const seen = new Set()
+  for (const value of raw) {
+    if (value === 'all') return []
+    if (typeof value === 'string' && SCOPE_IDS.includes(value)) seen.add(value)
   }
+  // 固定按 EXPORT_SCOPES 的顺序输出，保证文件名与文案稳定
+  return SCOPE_IDS.filter((id) => seen.has(id))
+}
+
+/** 范围标签：没选 = 全部记录，选了多个用「+」连起来 */
+export function scopeLabelOf(scopes) {
+  const ids = normalizeScopes(scopes)
+  if (ids.length === 0) return '全部记录'
+  return ids.map((id) => EXPORT_SCOPES.find((s) => s.id === id)?.label ?? id).join(' + ')
+}
+
+/** 文件名里的范围段：`all` 或 `pending-overdue` */
+export function scopeSlugOf(scopes) {
+  const ids = normalizeScopes(scopes)
+  return ids.length === 0 ? 'all' : ids.join('-')
+}
+
+/**
+ * 按范围筛条目（不改变原数组）。多个范围取并集。
+ * @param {Array} items
+ * @param {string|string[]} scopes 单个 id / id 数组 / 'all' / 省略
+ */
+export function filterByScope(items, scopes = 'all', now = Date.now()) {
+  const list = Array.isArray(items) ? items : []
+  const ids = normalizeScopes(scopes)
+  if (ids.length === 0) return list.slice()
+  const picked = new Set(ids)
+  return list.filter((item) => {
+    if (!item) return false
+    if (picked.has('overdue') && isOverdueItem(item, now)) return true
+    if (picked.has('pending') && item.status === 'pending') return true
+    if (picked.has('done') && item.status === 'completed') return true
+    if (picked.has('abandoned') && item.status === 'abandoned') return true
+    return false
+  })
 }
 
 /** 导出用统计 */
@@ -381,7 +412,9 @@ function htmlRow(item, index, now) {
 </tr>`
 }
 
-function htmlSection(title, rows, now) {
+/** 一组表格。空组默认不渲染——多选范围下「已完成（0）」会被误读成全局 0 条。 */
+function htmlSection(title, rows, now, { showEmpty = false } = {}) {
+  if (rows.length === 0 && !showEmpty) return ''
   if (rows.length === 0) return `<h2>${htmlEscape(title)}（0）</h2>\n<p class="empty">这一组没有记录。</p>`
   const body = rows.map((item, index) => htmlRow(item, index, now)).join('\n')
   return `<h2>${htmlEscape(title)}（${rows.length}）</h2>
@@ -411,6 +444,9 @@ export function buildHtml(items, meta = {}) {
     { k: '逾期', n: stats.overdue, alert: stats.overdue > 0 },
   ].map((card) => `<div class="card${card.alert ? ' alert' : ''}"><div class="n">${card.n}</div><div class="k">${htmlEscape(card.k)}</div></div>`).join('')
 
+  // 一份记录都没有时，三组都空；这时要让读者知道是「范围内无记录」，不是渲染坏了。
+  const emptyNote = stats.total === 0 ? '<p class="empty">本次导出范围内没有记录。</p>' : ''
+
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -426,6 +462,7 @@ export function buildHtml(items, meta = {}) {
   <h1>待办清单</h1>
   <p class="sub">导出于 ${htmlEscape(formatDateTime(now))}　·　范围：${htmlEscape(scopeLabel)}</p>
   <div class="cards">${cards}</div>
+  ${emptyNote}
   ${htmlSection('未完成', pending, now)}
   ${htmlSection('已完成', completed, now)}
   ${htmlSection('已放弃', abandoned, now)}
@@ -474,7 +511,7 @@ export function buildJson(items, meta = {}) {
     exportedAt: new Date(now).toISOString(),
     exportedAtLocal: formatDateTime(now),
     appVersion: typeof meta.appVersion === 'string' ? meta.appVersion : '',
-    scope: typeof meta.scope === 'string' ? meta.scope : 'all',
+    scopes: Array.isArray(meta.scopes) ? meta.scopes : normalizeScopes(meta.scope),
     scopeLabel: typeof meta.scopeLabel === 'string' ? meta.scopeLabel : '全部记录',
     stats: summarizeExport(sorted, now),
     items: sorted.map((item) => ({
@@ -685,30 +722,32 @@ export function buildXlsx(items, meta = {}) {
 /**
  * 生成导出文件。
  * @param {Array} items 全部待办条目
- * @param {{format?: string, scope?: string, now?: number, appVersion?: string}} options
- * @returns {{filename: string, mime: string, text?: string, bytes?: Uint8Array, count: number, format: string}}
+ * @param {{format?: string, scopes?: string|string[], scope?: string|string[], now?: number, appVersion?: string}} options
+ *   `scopes` 可传数组（多选）；`scope` 是旧字段名，仍兼容单值。
+ * @returns {{filename: string, mime: string, text?: string, bytes?: Uint8Array, count: number, format: string, scopes: string[], scopeLabel: string}}
  */
 export function buildExportFile(items, options = {}) {
   const format = EXPORT_FORMATS.some((f) => f.id === options.format) ? options.format : 'html'
-  const scope = EXPORT_SCOPES.some((s) => s.id === options.scope) ? options.scope : 'all'
+  const scopes = normalizeScopes(options.scopes ?? options.scope)
   const now = Number.isFinite(options.now) ? options.now : Date.now()
-  const picked = filterByScope(items, scope, now)
-  const scopeLabel = EXPORT_SCOPES.find((s) => s.id === scope)?.label ?? '全部记录'
-  const meta = { now, scope, scopeLabel, appVersion: options.appVersion }
-  const base = `dsh-todo-${stampForName(new Date(now))}-${scope}`
+  const picked = filterByScope(items, scopes, now)
+  const scopeLabel = scopeLabelOf(scopes)
+  const meta = { now, scopes, scopeLabel, appVersion: options.appVersion }
+  const base = `dsh-todo-${stampForName(new Date(now))}-${scopeSlugOf(scopes)}`
+  const common = { count: picked.length, format, scopes, scopeLabel }
 
   switch (format) {
     case 'md':
-      return { filename: `${base}.md`, mime: 'text/markdown;charset=utf-8', text: buildMarkdown(picked, meta), count: picked.length, format }
+      return { filename: `${base}.md`, mime: 'text/markdown;charset=utf-8', text: buildMarkdown(picked, meta), ...common }
     case 'csv':
-      return { filename: `${base}.csv`, mime: 'text/csv;charset=utf-8', text: buildCsv(picked, meta), count: picked.length, format }
+      return { filename: `${base}.csv`, mime: 'text/csv;charset=utf-8', text: buildCsv(picked, meta), ...common }
     case 'json':
-      return { filename: `${base}.json`, mime: 'application/json;charset=utf-8', text: buildJson(picked, meta), count: picked.length, format }
+      return { filename: `${base}.json`, mime: 'application/json;charset=utf-8', text: buildJson(picked, meta), ...common }
     case 'xlsx':
-      return { filename: `${base}.xlsx`, mime: XLSX_MIME, bytes: buildXlsx(picked, meta), count: picked.length, format }
+      return { filename: `${base}.xlsx`, mime: XLSX_MIME, bytes: buildXlsx(picked, meta), ...common }
     case 'html':
     default:
-      return { filename: `${base}.html`, mime: 'text/html;charset=utf-8', text: buildHtml(picked, meta), count: picked.length, format }
+      return { filename: `${base}.html`, mime: 'text/html;charset=utf-8', text: buildHtml(picked, meta), ...common }
   }
 }
 

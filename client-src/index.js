@@ -1507,29 +1507,39 @@ function GlobalReminderPopup({ todosApi, openSession }) {
  *
  * 设计取舍：
  * - 范围只影响「导出哪些条目」，格式只影响「导出成什么文件」，两者独立；
- * - 格式卡片直接写出「给谁看」，因为用户的原始需求就是「给人看和给 AI 看」；
- * - 默认 HTML + 全部记录（最常见的「我想留一份完整档案」）；
+ * - 范围可多选（v1.5.4）：未完成 / 逾期 / 已完成 / 已放弃 任选若干个，取并集；
+ *   一条都不选 = 全部记录，所以不再有「全部记录」这个按钮——它等于什么都不选；
+ * - 格式卡片只写一句说明，不再标「给人看 / 给 AI 看」，那行字是重复信息（用户明确说多余）；
+ * - 默认 HTML + 不选范围（= 全部记录）；
  * - v1.5.3：新增 inline 模式——设置页的折叠区直接复用这份表单，不弹遮罩。
  *   侧栏头部的导出按钮已移除（用户要求「这个页面要简洁」）。
  */
 function ExportDialog({ items, onClose, showToast, inline = false }) {
   const [format, setFormat] = useState('html')
-  const [scope, setScope] = useState('all')
+  // 多选：空数组 = 全部记录
+  const [scopes, setScopes] = useState([])
   const [busy, setBusy] = useState(false)
 
   const all = Array.isArray(items) ? items : []
   const stats = summarizeExport(all)
-  const scopeItem = EXPORT_SCOPES.find((s) => s.id === scope) ?? EXPORT_SCOPES[0]
   const formatItem = EXPORT_FORMATS.find((f) => f.id === format) ?? EXPORT_FORMATS[0]
+  const scopeLabel = scopes.length === 0
+    ? '全部记录'
+    : EXPORT_SCOPES.filter((s) => scopes.includes(s.id)).map((s) => s.label).join(' + ')
 
   // 预估将导出的条数（与真正导出用同一套筛选规则，避免「说 7 条实际 5 条」）
   const previewCount = all.filter((item) => {
-    if (scope === 'pending') return item?.status === 'pending'
-    if (scope === 'done') return item?.status === 'completed'
-    if (scope === 'abandoned') return item?.status === 'abandoned'
-    if (scope === 'overdue') return isOverdue(item)
-    return true
+    if (scopes.length === 0) return true
+    if (scopes.includes('overdue') && isOverdue(item)) return true
+    if (scopes.includes('pending') && item?.status === 'pending') return true
+    if (scopes.includes('done') && item?.status === 'completed') return true
+    if (scopes.includes('abandoned') && item?.status === 'abandoned') return true
+    return false
   }).length
+
+  const toggleScope = (id) => {
+    setScopes((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
 
   const run = useCallback(() => {
     if (busy) return
@@ -1541,8 +1551,8 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
     try {
       const result = buildExportFile(all, {
         format,
-        scope,
-        appVersion: '1.5.3',
+        scopes,
+        appVersion: '1.5.4',
       })
       const filename = downloadExportFile(result)
       showToast(`已导出 ${result.count} 条记录：${filename}`)
@@ -1553,7 +1563,7 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
     } finally {
       setBusy(false)
     }
-  }, [busy, previewCount, all, format, scope, showToast, onClose])
+  }, [busy, previewCount, all, format, scopes, showToast, onClose])
 
   const cardStyle = (active) => ({
     display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start',
@@ -1596,27 +1606,38 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
           }),
           h('span', { style: { fontSize: 13, fontWeight: 600 } }, option.label),
         ),
-        h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)', paddingLeft: 20 } }, option.audience),
         h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', paddingLeft: 20, lineHeight: 1.45 } }, option.hint),
       )),
     ),
 
-    h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 6 } }, '导出哪些'),
+    h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 } },
+      h('span', { style: { fontSize: 12, fontWeight: 600 } }, '导出哪些'),
+      h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' } }, '可多选，不选就是全部'),
+    ),
     h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
-      EXPORT_SCOPES.map((option) => h('button', {
-        key: option.id, type: 'button', onClick: () => setScope(option.id),
-        title: option.hint,
-        style: {
-          padding: '5px 12px', fontSize: 12, cursor: 'pointer', borderRadius: 999,
-          border: `1px solid ${scope === option.id ? 'var(--dsw-alias-brand-primary, #f59e0b)' : 'var(--dsw-alias-border-l2, #ddd)'}`,
-          background: scope === option.id
-            ? 'color-mix(in srgb, var(--dsw-alias-brand-primary, #f59e0b) 12%, transparent)'
-            : 'transparent',
-          color: scope === option.id
-            ? 'var(--dsw-alias-brand-primary, #f59e0b)'
-            : 'var(--dsw-alias-label-secondary)',
+      EXPORT_SCOPES.map((option) => {
+        const active = scopes.includes(option.id)
+        return h('button', {
+          key: option.id, type: 'button',
+          onClick: () => toggleScope(option.id),
+          title: option.hint,
+          'aria-pressed': active,
+          style: {
+            padding: '5px 12px', fontSize: 12, cursor: 'pointer', borderRadius: 999,
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            border: `1px solid ${active ? 'var(--dsw-alias-brand-primary, #f59e0b)' : 'var(--dsw-alias-border-l2, #ddd)'}`,
+            background: active
+              ? 'color-mix(in srgb, var(--dsw-alias-brand-primary, #f59e0b) 12%, transparent)'
+              : 'transparent',
+            color: active
+              ? 'var(--dsw-alias-brand-primary, #f59e0b)'
+              : 'var(--dsw-alias-label-secondary)',
+          },
         },
-      }, option.label)),
+          active ? h('span', { style: { fontSize: 11, lineHeight: 1 } }, '✓') : null,
+          option.label,
+        )
+      }),
     ),
 
     h('div', {
@@ -1626,7 +1647,7 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
       },
     },
       h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } },
-        `将导出 ${previewCount} 条 → ${formatItem.label}`),
+        `将导出 ${previewCount} 条（${scopeLabel}）→ ${formatItem.label}`),
       inline ? null : h('button', {
         type: 'button', onClick: onClose,
         style: {
@@ -1987,7 +2008,7 @@ h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'spac
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', { style: { fontSize: 16 } }, '📋'),
           h('span', { style: { fontSize: 15, fontWeight: 600 } }, '待办清单设置'),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.3'),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.4'),
         ),
         h('button', { type: 'button', onClick: onClose, style: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--dsh-alias-label-secondary)', padding: '4px 8px' } }, '×'),
       ),
@@ -2347,7 +2368,7 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
     // 头部（参考 dsh-archive-manager）
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '16px 0', borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)' } },
       h('h2', { style: { fontSize: 20, fontWeight: 600, margin: 0 } }, '待办清单'),
-      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.3'),
+      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.4'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 'auto' } }, 'GitHub'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/issues', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none' } }, '问题反馈'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/releases', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 8 } }, '检查更新'),

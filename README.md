@@ -97,17 +97,17 @@ Version 1.5.0 added export. The design goal was simple: **the same records must 
 
 Open **设置 → 待办清单** (Settings → Todo Checklist), expand **导出全部记录**, then pick a format and a scope.
 
-**Formats** (`给人看` = for humans, `给 AI 看` = for AI):
+**Formats**:
 
-| Format | Best for | Notes |
-|---|---|---|
-| **HTML** | Humans | One self-contained `.html` file. Double-click to open, print to PDF, no internet needed. Escapes all content (XSS-safe), follows dark mode, has a print stylesheet |
-| **Markdown** | Both | Plain text with headings and checkboxes. Paste into any notes app, or feed whole to an AI |
-| **Excel (.xlsx)** | Humans | A real `.xlsx` (OOXML, 14 columns, frozen header row) — opens in Excel / WPS / Numbers and supports filter and sort. **No third-party library**: the ZIP container is written by hand, so the plugin stays dependency-free |
-| **CSV** | AI | Universal plain text. UTF-8 **with BOM**, so Excel opens Chinese correctly; RFC-style quoting for commas, quotes and newlines |
-| **JSON** | AI | Complete structured records, every field present — the best shape for precise machine parsing |
+| Format | Notes |
+|---|---|
+| **HTML** | One self-contained `.html` file. Double-click to open, print to PDF, no internet needed. Escapes all content (XSS-safe), follows dark mode, has a print stylesheet |
+| **Markdown** | Plain text with headings and checkboxes. Paste into any notes app, or feed whole to an AI |
+| **Excel (.xlsx)** | A real `.xlsx` (OOXML, 14 columns, frozen header row) — opens in Excel / WPS / Numbers and supports filter and sort. **No third-party library**: the ZIP container is written by hand, so the plugin stays dependency-free |
+| **CSV** | Universal plain text. UTF-8 **with BOM**, so Excel opens Chinese correctly; RFC-style quoting for commas, quotes and newlines |
+| **JSON** | Complete structured records, every field present — the best shape for precise machine parsing |
 
-**Scopes**: all records (default) · pending only · completed only · abandoned only · overdue only.
+**Scopes are multi-select**: pick any combination of pending / overdue / completed / abandoned; the export unions them, and selecting nothing means all records. The chosen scopes go into the filename and the summary line, e.g. `dsh-todo-20261019-0140-pending-overdue.md`.
 
 **Two things worth knowing:**
 
@@ -259,7 +259,7 @@ dsh-todo-checklist/
 
 ## 📝 Changelog · 更新日志
 
-See [CHANGELOG.md](./CHANGELOG.md). Recent: **1.5.3** moves export out of the sidebar into a collapsible section on the settings page; **1.5.2** stops abandoned records from showing up as unchecked pending items in `todo_list`; **1.5.1** fixes the todo list becoming unreadable after a plugin reload (storage domain `already-open`); **1.5.0** adds export (HTML / Markdown / Excel / CSV / JSON) plus the `todo_export` tool.
+See [CHANGELOG.md](./CHANGELOG.md). Recent: **1.5.4** lets you pick several export scopes at once (pending / overdue / completed / abandoned, unioned) and drops the redundant "for humans / for AI" caption; **1.5.3** moves export out of the sidebar into a collapsible section on the settings page; **1.5.2** stops abandoned records from showing up as unchecked pending items in `todo_list`; **1.5.1** fixes the todo list becoming unreadable after a plugin reload (storage domain `already-open`); **1.5.0** adds export (HTML / Markdown / Excel / CSV / JSON) plus the `todo_export` tool.
 
 ---
 
