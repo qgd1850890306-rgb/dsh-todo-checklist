@@ -1,10 +1,11 @@
 {
   "name": "dsh-todo-checklist",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "description": "DeepSeek Harness 待办插件：划词加入待办、对话自动捕获、左侧栏面板汇总与到期提醒（应用内弹窗或机器人推送），数据跨重启持久保存。Todo sidecar for DeepSeek Harness: selection-to-todo, chat-captured todos, a left sidebar panel and due reminders (in-app popup or IM bot push), persisted across restarts.",
   "type": "module",
+  "packageManager": "pnpm@11.7.0",
   "engines": {
-    "node": ">=22.18.0"
+    "node": "^22.19.0 || >=24.0.0"
   },
   "main": "lib/host.js",
   "exports": {
@@ -17,10 +18,13 @@
     "./typert": {
       "default": "./lib/typert.js"
     },
+    "./icon": "./icon.svg",
+    "./locale/*.json": "./locale/*.json",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
+    "lib",
     "lib/host.js",
     "lib/typert.js",
     "lib/client.js",
@@ -28,11 +32,17 @@
     "host/store.js",
     "client-src/index.js",
     "client-src/segment-due-input.js",
+    "client-src/export.js",
+    "shared/export-core.js",
+    "locale/en.json",
+    "locale/zh.json",
+    "icon.svg",
     "scripts/build-client.mjs",
     "scripts/build-host.mjs",
     "typert.js",
     "cordis.patch.yml",
     "README.md",
+    "README-zh.md",
     "CHANGELOG.md",
     "LICENSE"
   ],
@@ -67,7 +77,8 @@
       "dsh": ">=0.2.0-rc.1",
       "dshReleases": {
         "0.2.0-rc.1": "compatible",
-        "0.2.0-rc.2": "compatible"
+        "0.2.0-rc.2": "compatible",
+        "0.2.1-rc.2": "compatible"
       }
     }
   },
@@ -91,7 +102,7 @@
     },
     "compatibility": {
       "dsh": ">=0.2.0-rc.1",
-      "node": ">=22.18.0"
+      "node": "^22.19.0 || >=24.0.0"
     },
     "permissions": {
       "storage": [

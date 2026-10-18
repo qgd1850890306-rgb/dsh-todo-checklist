@@ -19,6 +19,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import {
   createItem, deriveTitle, dueItems, nextDueAt, normalizeMultiline, normalizeText, parseDueAt, pruneItems, resolveNotify, summarize, tolerantStats, todoDomainSpec,
 } from './store.js'
+import { buildExportFile, isTextExport, summarizeExport } from '../shared/export-core.js'
 
 export { todoDomainSpec } from './store.js'
 
@@ -42,6 +43,20 @@ const SOURCE_LABEL = {
 
 /** IM 投递服务的软依赖候选（照搬 dsh-tasks：永不走 inject 硬依赖）。 */
 const NOTIFY_SERVICE_CANDIDATES = ['dshIm']
+
+/**
+ * v1.4.0 通用化：合并「静态候选 + 运行时已保存配置引用的服务名」。
+ * 照 dsh-tasks listProviders——单条/全局配置里记了具体 service 时优先用它，其余候选兜底。
+ * @param {string|undefined} preferred 优先服务名（单条 item.imService 或全局 notify.service）
+ */
+const notifyCandidates = (preferred) => {
+  const ordered = []
+  if (typeof preferred === 'string' && preferred.length > 0) ordered.push(preferred)
+  for (const candidate of NOTIFY_SERVICE_CANDIDATES) {
+    if (!ordered.includes(candidate)) ordered.push(candidate)
+  }
+  return ordered
+}
 
 /**
  * v1.3.0 发布加固：诊断日志不再写死开发机绝对路径，也不再无条件写盘。
@@ -332,7 +347,9 @@ function createService(ctx) {
     // v1.1 优先级：单条 item 指定机器人 > 全局配置 > 遍历全部 bot
     const chosenBotId = item.imBotId || globalNotify.imBotId
     const chosenTargetId = item.imTargetId || globalNotify.imTargetId
-    for (const candidate of NOTIFY_SERVICE_CANDIDATES) {
+    // v1.4.0 通用化：单条 item.imService > 全局 notify.service > 静态候选兜底
+    const preferredService = item.imService || globalNotify.service
+    for (const candidate of notifyCandidates(preferredService)) {
       const im = ctx.get(candidate)
       if (!im || typeof im.send !== 'function') continue
       if (chosenBotId && chosenTargetId) {
@@ -353,10 +370,10 @@ function createService(ctx) {
     }
   }
 
-  /** v1.1 收集真实机器人（供客户端下拉）：单次尝试，遍历 IM 服务，返回 [{botId, channel, targets:[{targetId,name}]}]。 */
+  /** v1.1 收集真实机器人（供客户端下拉）：单次尝试，遍历 IM 服务，返回 [{botId, channel, service, targets:[{targetId,name}]}]。 */
   const collectImBotsOnce = async () => {
     const result = []
-    for (const candidate of NOTIFY_SERVICE_CANDIDATES) {
+    for (const candidate of notifyCandidates(undefined)) {
       const im = ctx.get(candidate)
       if (!im || typeof im.listBots !== 'function') continue
       let bots = []
@@ -376,7 +393,8 @@ function createService(ctx) {
           const name = typeof t === 'object' ? (t?.name ?? t?.title ?? t?.displayName ?? t?.targetName ?? '') : ''
           return { targetId, name }
         }).filter(Boolean)
-        result.push({ botId, channel, targets: targetList })
+        // v1.4.0 通用化：每个机器人打上来源服务名，客户端下拉据此在保存时回写 imService
+        result.push({ botId, channel, service: candidate, targets: targetList })
       }
     }
     return result
@@ -485,6 +503,8 @@ function createService(ctx) {
           // v1.1 单条机器人（留空跟随全局）
           ...(request?.imBotId ? { imBotId: normalizeText(request.imBotId, 128) } : {}),
           ...(request?.imTargetId ? { imTargetId: normalizeText(request.imTargetId, 128) } : {}),
+          // v1.4.0 通用化：单条机器人来源服务名（缺省跟随全局/遍历候选）
+          ...(request?.imService ? { imService: normalizeText(request.imService, 64) } : {}),
         })
         await writeItems([...items, item])
         return { ok: true, value: { id: item.id, pendingCount: summarize([...items, item]).pendingCount } }
@@ -759,6 +779,41 @@ function createService(ctx) {
       }
     },
 
+    /**
+     * v1.4.0 转官方定时任务（自装 dsh-tasks 优先、官方 dsh-schedule 兜底）。
+     * 客户端 fetch /dsh-tasks/api 失败或未装时，回退到这里直调 ctx.get('schedule').create。
+     * request 与官方 schedule.create 的 request 同构（snake_case 六选一 selector）。
+     */
+    async convertToSchedule(request) {
+      try {
+        const schedule = ctx.get('schedule')
+        if (!schedule || typeof schedule.create !== 'function') {
+          return { ok: false, error: '未检测到官方定时任务服务（dsh-schedule），且自装定时任务插件（dsh-tasks）不可用。' }
+        }
+        const title = normalizeText(request?.title, 120)
+        const prompt = normalizeText(request?.prompt, 4000)
+        if (title.length === 0) return { ok: false, error: '定时任务标题不能为空' }
+        if (prompt.length === 0) return { ok: false, error: '定时任务内容不能为空' }
+        const sessionId = request?.sessionId
+        if (typeof sessionId !== 'string' || sessionId.length === 0) {
+          return { ok: false, error: '缺少来源会话 ID，无法绑定定时任务' }
+        }
+        // 六选一 selector 原样透传（官方 create 会校验「恰好一个」）
+        const selector = {}
+        if (request?.at !== undefined) selector.at = request.at
+        if (request?.after_seconds !== undefined) selector.after_seconds = request.after_seconds
+        if (request?.every_seconds !== undefined) selector.every_seconds = request.every_seconds
+        if (request?.daily !== undefined) selector.daily = request.daily
+        if (request?.weekly !== undefined) selector.weekly = request.weekly
+        if (request?.cron !== undefined) selector.cron = request.cron
+        const record = await schedule.create(sessionId, { title, prompt, ...selector })
+        return { ok: true, value: { scheduleId: record?.id ?? '' } }
+      } catch (error) {
+        appendDiag({ convertToScheduleError: messageOf(error) })
+        return { ok: false, error: messageOf(error) }
+      }
+    },
+
     /** 记住 AI 总结的模型偏好。 */
     async setAiModel(request) {
       try {
@@ -945,6 +1000,12 @@ function createService(ctx) {
             if (targetId.length > 0) merged.imTargetId = targetId
             else delete merged.imTargetId
           }
+          // v1.4.0 通用化：单条机器人来源服务名（空串=跟随全局，删除字段）
+          if (request.imService !== undefined) {
+            const svc = normalizeText(request.imService, 64)
+            if (svc.length > 0) merged.imService = svc
+            else delete merged.imService
+          }
           // 转定时任务
           if (request.handedToTasks !== undefined) merged.handedToTasks = request.handedToTasks === true
           // 应用内弹窗已触发标记（客户端弹窗关闭回写）
@@ -1084,6 +1145,12 @@ function createService(ctx) {
         if (request?.im !== undefined) notify.im = request.im === true
         if (request?.imBotId !== undefined) notify.imBotId = normalizeText(request.imBotId, 100)
         if (request?.imTargetId !== undefined) notify.imTargetId = normalizeText(request.imTargetId, 100)
+        // v1.4.0 通用化：全局默认机器人来源服务名（空串=清除）
+        if (request?.service !== undefined) {
+          const svc = normalizeText(request.service, 64)
+          if (svc.length > 0) notify.service = svc
+          else delete notify.service
+        }
         // v1.1.2 AI 记录默认提醒时间
         const nextConfig = { ...state.config, notify }
         if (request?.aiDefaultReminder !== undefined) {
@@ -1196,6 +1263,7 @@ const PROMPT_SECTION = [
   '- 当用户提出需要后续跟进的事项、任务、提醒或承诺（例如「记一下」「提醒我」「周五前要」「列入待办」），调用 todo_add 写入；title 用一句简洁标题，content 放详情，source 传 "model"。',
   '- 用户提到截止期限（如「周五前」「9月30日」）时，把可解析的日期写进 dueAt 参数（ISO 格式优先，如 2026-09-30）。',
   '- 用户询问当前有哪些待办时，调用 todo_list 并按简短列表转述；有期限的条目优先说明。',
+  '- 用户要求「导出/备份/汇总全部待办」时，调用 todo_export（默认 Markdown）；需要表格给 Excel 用时让用户在「待办清单」设置页点「导出」选 Excel。',
   '- 纯问答、闲聊、以及当前回合内即可完成的小请求不要写入待办；同一事项不要重复写入。',
 ].join('\n')
 
@@ -1270,6 +1338,49 @@ export function apply(ctx) {
       return formatTodoList(state.value.items)
     },
   })), 'todo-sidecar: tool todo_list')
+
+  ctx.effect(() => ctx.tools.register(defineTool({
+    name: 'todo_export',
+    description: 'Export the user\'s todo records as text. 导出用户全部待办记录（默认 Markdown，可直接阅读或贴进上下文）。format 可选 md / csv / json / html；xlsx 为二进制、请让用户在界面上导出。',
+    parameters: {
+      format: {
+        type: 'string',
+        enum: ['md', 'csv', 'json', 'html'],
+        description: 'Text format. 文本格式：md（默认，最省 token）/ csv / json / html。',
+      },
+      scope: {
+        type: 'string',
+        enum: ['all', 'pending', 'done', 'abandoned', 'overdue'],
+        description: 'Which records. 导出范围：all（默认，全部记录）/ pending / done / abandoned / overdue。',
+      },
+    },
+    output: {
+      schema: { type: 'string' },
+      render: (_args, value) => [{ type: 'text', text: value }],
+    },
+    async execute(args) {
+      const store = ctx.get?.('todos')
+      if (store === undefined) return '待办服务尚未就绪，请稍后重试。'
+      const state = await store.list({})
+      if (!state.ok) return `读取待办失败：${state.error ?? '未知错误'}`
+      const items = state.value.items
+      const format = typeof args?.format === 'string' && args.format !== '' ? args.format : 'md'
+      if (format === 'xlsx') {
+        return 'Excel 是二进制格式，无法作为文本返回；请让用户在「待办清单」设置页点击「导出」并选择 Excel。'
+      }
+      const scope = typeof args?.scope === 'string' && args.scope !== '' ? args.scope : 'all'
+      const result = buildExportFile(items, { format, scope })
+      if (!isTextExport(result)) {
+        return '该格式为二进制，无法直接返回；请改用 md / csv / json，或让用户在界面上导出。'
+      }
+      const stats = summarizeExport(items)
+      return [
+        `已导出 ${result.count} 条记录（全部 ${stats.total} 条：未完成 ${stats.pending} / 已完成 ${stats.completed} / 已放弃 ${stats.abandoned}），文件名 ${result.filename}。`,
+        '',
+        result.text,
+      ].join('\n')
+    },
+  })), 'todo-sidecar: tool todo_export')
 
   ctx.effect(() => ctx.systemPrompt.section({
     name: 'plugin:todo-sidecar',

@@ -3,6 +3,45 @@
 本插件遵循语义化版本：`主版本.次版本.修订号`。
 早期版本（0.x）为内部迭代，自 `1.0.0` 起面向使用者记录。
 
+## 1.5.0 — 2026-10-19
+
+新增导出功能（五种格式、五种范围），并适配 DSH `0.2.1-rc.2` 与 0.2 世代插件规范。
+
+### 新增
+- **一键导出全部记录**：侧栏面板头部与设置页各有一个「导出」入口，可选 **HTML / Markdown / Excel(.xlsx) / CSV / JSON** 五种格式，以及**全部 / 仅未完成 / 仅已完成 / 仅已放弃 / 仅逾期** 五种范围。导出前实时显示「将导出 N 条」。
+- **`.xlsx` 是真 Excel 文件**：OOXML 格式、14 列、首行冻结，Excel / WPS / Numbers 直接打开可筛选排序。ZIP 容器与工作表 XML 由插件自己生成，**没有引入任何第三方库**，插件保持零运行时依赖。
+- **`todo_export` 模型工具**：让 AI 自己取数据 —— `todo_export({ format: "md"|"csv"|"json"|"html", scope: ... })` 直接在对话里返回文本。`.xlsx` 是二进制，工具会提示走界面按钮。
+- **格式化逻辑单一来源**：新增 `shared/export-core.js`，界面导出与 AI 工具**共用同一份代码**，两条通道产出的内容不会漂移。
+
+### 改进
+- **适配 DSH 0.2.1-rc.2**：`dsh.compatibility.dshReleases` 增加 `0.2.1-rc.2: compatible`；官方 `dsh-plugin-dev verify`（打包 → 装进干净 profile → 冒烟 → 卸载）通过。
+- **补齐 0.2 世代展示元数据**：新增 `locale/en.json`、`locale/zh.json`（`meta.title` / `meta.description`）与 `icon.svg`，并在 `exports` 中导出 `./locale/*.json` 与 `./icon`。
+- **`engines.node` 改为 `^22.19.0 || >=24.0.0`**，同时覆盖 Node 22 与 24。
+- **`files` 白名单补 `lib` 目录项**，与 `main` 指向一致；`packageManager` 固定为 `pnpm@11.7.0`。
+- **CSV 带 UTF-8 BOM**，Excel 打开中文不乱码。
+- 面板头部新增导出按钮（点击不会误触折叠面板）。
+
+### 修复
+- **侧栏标题被挤成竖排**：面板变窄时标题会逐字折行。现在标题与徽标都禁止换行，空间不够时优先让徽标让位。
+- **导出内容剔除控制字符**：避免个别记录里的不可见字符破坏 HTML / XML 结构。
+
+### English
+- **Export**: HTML / Markdown / Excel(.xlsx) / CSV / JSON, each over all / pending / done / abandoned / overdue records.
+- **Real `.xlsx`** (OOXML, 14 columns, frozen header) generated with a hand-written ZIP writer — still zero runtime dependencies.
+- **`todo_export` model tool** so the assistant can hand records straight back into the conversation.
+- **Single source of formatting** in `shared/export-core.js`, shared by the UI download and the AI tool.
+- **DSH `0.2.1-rc.2` support**: compatibility entry added; official `dsh-plugin-dev verify` (pack → install into a clean profile → smoke → uninstall) passes.
+- **0.2-generation display metadata**: `locale/en.json`, `locale/zh.json`, `icon.svg` and their `exports` entries.
+- Fixed the sidebar title wrapping one character per line on narrow panels.
+
+## 1.4.0 — 2026-10-12
+
+两项通用化：机器人推送与转定时任务都改为「优先自己安装的插件，再官方/内置」。
+
+### 改进
+- **机器人推送通用化**：机器人下拉从「硬编码只认 dsh-im」改为「静态候选 + 运行时合并已保存配置引用的服务名」，并给每个机器人打上来源服务名（`service` 字段）。单条待办与全局默认都持久化 `imService`，推送时优先按记录的来源服务精准路由，缺省再遍历候选兜底。以后装了别的 bot 投递插件也能自动被发现。
+- **转定时任务改为「自装插件优先、官方兜底」**：保持原来的自装「定时任务」（dsh-tasks，HTTP 端点）主路径；当它未安装、或调用失败（404/5xx）时，自动回退到官方内置「自动化任务」（dsh-schedule，进程内 `schedule.create`），不再只弹「请先安装」。回退时按当前 cron 转成官方的 `{ expression, time_zone }` 选择器，标题/内容原样带过去。
+
 ## 1.3.0 — 2026-10-12
 
 提醒时间输入重做为「五段式」自绘控件，并修复一个由它引发的划词气泡消失问题。

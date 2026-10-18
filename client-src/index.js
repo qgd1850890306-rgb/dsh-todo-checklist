@@ -13,6 +13,13 @@ import { Component, createElement as h, Fragment, useCallback, useEffect, useRef
 import { createRoot } from 'react-dom/client'
 import { TYPERT } from '../typert.js'
 import { SegmentDueInput } from './segment-due-input.js'
+import {
+  EXPORT_FORMATS,
+  EXPORT_SCOPES,
+  buildExportFile,
+  downloadExportFile,
+  summarizeExport,
+} from './export.js'
 
 //#region Typert 客户端描述符：宿主清单纯展开（全字段�
 export const TYPERT_REMOTE = {
@@ -145,6 +152,13 @@ function IconList({ size = 15, color }) {
 function IconChevron({ size = 14, color }) {
   return h('svg', { width: size, height: size, viewBox: '0 0 24 24', style: { color }, ...ICON_STROKE },
     h('path', { d: 'M9 5l7 7-7 7' }))
+}
+/** v1.5.0 导出：托盘 + 向下箭头，导出按钮用 */
+function IconExport({ size = 15, color }) {
+  return h('svg', { width: size, height: size, viewBox: '0 0 24 24', style: { color }, ...ICON_STROKE },
+    h('path', { d: 'M12 3v12' }),
+    h('path', { d: 'M7.5 10.5L12 15l4.5-4.5' }),
+    h('path', { d: 'M4 18.5h16' }))
 }
 
 /** 快速添加里内联日期（如「发模板 2026-09-30」）�?拆出 dueAt�?*/
@@ -364,6 +378,15 @@ const style = {
     borderRadius: 999,
     background: 'color-mix(in srgb, var(--dsw-alias-state-success-primary, #22c55e) 14%, transparent)',
     color: 'var(--dsw-alias-state-success-primary, #22c55e)',
+    animation: 'dshTodoAiPulse 1.4s ease-in-out infinite',
+  },
+  // v1.5.0：侧栏头部 AI 整理中指示灯（替代文字徽标，避免 254px 侧栏挤掉标题）
+  aiPendingDot: {
+    flexShrink: 0,
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    background: 'var(--dsw-alias-state-success-primary, #22c55e)',
     animation: 'dshTodoAiPulse 1.4s ease-in-out infinite',
   },
   chipBadge: {
@@ -772,10 +795,11 @@ sidebarWrap: {
   sidebarHead: {
     display: 'flex',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     cursor: 'pointer',
     userSelect: 'none',
     padding: '6px 8px',
+    overflow: 'hidden',
   },
   // v1.2.1 反馈④：头部展开箭头�?4px SVG，替�?26px 文字箭头，行高更紧凑对齐官方 panelRow�
 sidebarChevron: {
@@ -797,11 +821,24 @@ sidebarArrow: {
     fontWeight: 700,
     lineHeight: 1,
   },
-  sidebarTitle: { fontSize: 12, fontWeight: 600, flex: 1, textAlign: 'left' },
+  // v1.5.0 修复：头部一行放不下时标题会被挤成竖排（中文逐字换行）。
+  // whiteSpace:nowrap 保证永不断行，空间不足时退化为省略号；徽标一律不收缩。
+  sidebarTitle: {
+    fontSize: 12,
+    fontWeight: 600,
+    flex: '1 1 auto',
+    minWidth: 0,
+    textAlign: 'left',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
   sidebarBadge: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: 'var(--dsw-alias-label-secondary)',
     fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
   },
   sidebarContent: {
     overflow: 'hidden',
@@ -1070,6 +1107,7 @@ function TodoPopup({ text, sessionId, locator, todosApi, onClose, onAdded, showT
         // v1.2.1 反馈③：弹窗内选定的机器人/目标（空�?跟随全局，不传）
         ...(imNotify === true && imBotId.length > 0 ? { imBotId } : {}),
         ...(imNotify === true && imTargetId.length > 0 ? { imTargetId } : {}),
+        ...(imNotify === true && imBotId.length > 0 && (imBots.find((bot) => bot.botId === imBotId)?.service) ? { imService: imBots.find((bot) => bot.botId === imBotId).service } : {}),
         ...(sessionId === undefined || sessionId === null ? {} : { sessionId }),
         ...(locator?.messageId ? { messageId: locator.messageId } : {}),
         ...(locator?.anchorText ? { anchorText: locator.anchorText } : {}),
@@ -1463,6 +1501,172 @@ function GlobalReminderPopup({ todosApi, openSession }) {
 //#endregion
 
 //#region 左侧侧栏常驻面板（v0.6：参�?cost-meter 样式 + 全局划词气泡，不依赖 dock 渲染�
+//#region v1.5.0 导出对话框（全部记录 → HTML / Markdown / Excel / CSV / JSON）
+/**
+ * 导出全部记录的对话框。
+ *
+ * 设计取舍：
+ * - 范围只影响「导出哪些条目」，格式只影响「导出成什么文件」，两者独立；
+ * - 格式卡片直接写出「给谁看」，因为用户的原始需求就是「给人看和给 AI 看」；
+ * - 默认 HTML + 全部记录（最常见的「我想留一份完整档案」）。
+ */
+function ExportDialog({ items, onClose, showToast }) {
+  const [format, setFormat] = useState('html')
+  const [scope, setScope] = useState('all')
+  const [busy, setBusy] = useState(false)
+
+  const all = Array.isArray(items) ? items : []
+  const stats = summarizeExport(all)
+  const scopeItem = EXPORT_SCOPES.find((s) => s.id === scope) ?? EXPORT_SCOPES[0]
+  const formatItem = EXPORT_FORMATS.find((f) => f.id === format) ?? EXPORT_FORMATS[0]
+
+  // 预估将导出的条数（与真正导出用同一套筛选规则，避免「说 7 条实际 5 条」）
+  const previewCount = all.filter((item) => {
+    if (scope === 'pending') return item?.status === 'pending'
+    if (scope === 'done') return item?.status === 'completed'
+    if (scope === 'abandoned') return item?.status === 'abandoned'
+    if (scope === 'overdue') return isOverdue(item)
+    return true
+  }).length
+
+  const run = useCallback(() => {
+    if (busy) return
+    if (previewCount === 0) {
+      showToast('这个范围里没有记录可导出')
+      return
+    }
+    setBusy(true)
+    try {
+      const result = buildExportFile(all, {
+        format,
+        scope,
+        appVersion: '1.5.0',
+      })
+      const filename = downloadExportFile(result)
+      showToast(`已导出 ${result.count} 条记录：${filename}`)
+      onClose()
+    } catch (error) {
+      console.warn('[dsh-todo] export failed:', error)
+      showToast(`导出失败：${error?.message ?? error}`)
+    } finally {
+      setBusy(false)
+    }
+  }, [busy, previewCount, all, format, scope, showToast, onClose])
+
+  const cardStyle = (active) => ({
+    display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start',
+    padding: '10px 12px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+    border: `1px solid ${active ? 'var(--dsw-alias-brand-primary, #f59e0b)' : 'var(--dsw-alias-border-l2, #ddd)'}`,
+    background: active
+      ? 'color-mix(in srgb, var(--dsw-alias-brand-primary, #f59e0b) 10%, transparent)'
+      : 'var(--dsw-alias-bg-layer-2, #f8f8f8)',
+    color: 'var(--dsw-alias-label-primary)',
+    minWidth: 150, flex: '1 1 150px',
+  })
+
+  return h('div', {
+    style: {
+      position: 'fixed', inset: 0, zIndex: 2147483647,
+      background: 'rgba(0, 0, 0, .38)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 20,
+    },
+    onClick: (e) => { if (e.target === e.currentTarget) onClose() },
+  },
+    h('div', {
+      style: {
+        width: 'min(560px, 100%)', maxHeight: '86vh', overflowY: 'auto',
+        background: 'var(--dsw-alias-bg-layer-1, #fff)',
+        color: 'var(--dsw-alias-label-primary)',
+        border: '1px solid var(--dsw-alias-border-l2, #ddd)',
+        borderRadius: 12, padding: '18px 20px 20px',
+        boxShadow: '0 16px 48px rgba(0, 0, 0, .22)',
+      },
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', marginBottom: 4 } },
+        h('h3', { style: { fontSize: 16, fontWeight: 600, margin: 0 } }, '导出待办记录'),
+        h('button', {
+          type: 'button', onClick: onClose,
+          style: {
+            marginLeft: 'auto', border: 'none', background: 'transparent', cursor: 'pointer',
+            color: 'var(--dsw-alias-label-secondary)', padding: 4, lineHeight: 0,
+          },
+          title: '关闭',
+        }, h(IconX, { size: 16 })),
+      ),
+      h('p', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', margin: '0 0 16px' } },
+        `共 ${stats.total} 条记录（未完成 ${stats.pending} / 已完成 ${stats.completed} / 已放弃 ${stats.abandoned}）。导出内容只包含这份清单，不含对话原文。`),
+
+      h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 6 } }, '导出成什么'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 } },
+        EXPORT_FORMATS.map((option) => h('label', {
+          key: option.id, style: cardStyle(format === option.id),
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+            h('input', {
+              type: 'radio', name: 'dsh-todo-export-format', value: option.id,
+              checked: format === option.id,
+              onChange: () => setFormat(option.id),
+              style: { margin: 0, accentColor: 'var(--dsw-alias-brand-primary, #f59e0b)' },
+            }),
+            h('span', { style: { fontSize: 13, fontWeight: 600 } }, option.label),
+          ),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)', paddingLeft: 20 } }, option.audience),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', paddingLeft: 20, lineHeight: 1.45 } }, option.hint),
+        )),
+      ),
+
+      h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 6 } }, '导出哪些'),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } },
+        EXPORT_SCOPES.map((option) => h('button', {
+          key: option.id, type: 'button', onClick: () => setScope(option.id),
+          title: option.hint,
+          style: {
+            padding: '5px 12px', fontSize: 12, cursor: 'pointer', borderRadius: 999,
+            border: `1px solid ${scope === option.id ? 'var(--dsw-alias-brand-primary, #f59e0b)' : 'var(--dsw-alias-border-l2, #ddd)'}`,
+            background: scope === option.id
+              ? 'color-mix(in srgb, var(--dsw-alias-brand-primary, #f59e0b) 12%, transparent)'
+              : 'transparent',
+            color: scope === option.id
+              ? 'var(--dsw-alias-brand-primary, #f59e0b)'
+              : 'var(--dsw-alias-label-secondary)',
+          },
+        }, option.label)),
+      ),
+
+      h('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: 10, marginTop: 18,
+          paddingTop: 14, borderTop: '1px solid var(--dsw-alias-border-l2, #eee)',
+        },
+      },
+        h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } },
+          `将导出 ${previewCount} 条 → ${formatItem.label}`),
+        h('button', {
+          type: 'button', onClick: onClose,
+          style: {
+            marginLeft: 'auto', padding: '7px 16px', fontSize: 13, cursor: 'pointer',
+            borderRadius: 6, border: '1px solid var(--dsw-alias-border-l2, #ddd)',
+            background: 'transparent', color: 'var(--dsw-alias-label-primary)',
+          },
+        }, '取消'),
+        h('button', {
+          type: 'button', onClick: run, disabled: busy || previewCount === 0,
+          style: {
+            padding: '7px 18px', fontSize: 13, fontWeight: 500, borderRadius: 6, border: 'none',
+            cursor: busy || previewCount === 0 ? 'not-allowed' : 'pointer',
+            background: 'var(--dsw-alias-brand-primary, #f59e0b)', color: '#fff',
+            opacity: busy || previewCount === 0 ? 0.55 : 1,
+          },
+        }, busy ? '导出中…' : '导出文件'),
+      ),
+      h('p', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', margin: '10px 0 0', lineHeight: 1.5 } },
+        '文件会下载到浏览器的默认下载目录。HTML 可直接双击打开、也能打印成 PDF；Excel 可用 Excel / WPS 打开；Markdown / CSV / JSON 适合贴给 AI 或导入其它工具。'),
+    ),
+  )
+}
+//#endregion
+
 function TodoSidebar({ todosApi, sessionOpen, createFollowupSession }) {
   const [items, setItems] = useState([])
   const [open, setOpen] = useState(readFlag('dsh-todo:sidebar-open', false))
@@ -1472,6 +1676,8 @@ function TodoSidebar({ todosApi, sessionOpen, createFollowupSession }) {
   const [editingItem, setEditingItem] = useState(null)
   // v1.1.3 修复③：AI 总结在途标识（�?dock chip 同款徽标�
   const [aiPending, setAiPending] = useState(false)
+  // v1.5.0：导出对话框
+  const [exportOpen, setExportOpen] = useState(false)
   const aliveRef = useRef(true)
   const toastTimerRef = useRef(undefined)
   const panelRef = useRef(null)
@@ -1655,26 +1861,38 @@ function TodoSidebar({ todosApi, sessionOpen, createFollowupSession }) {
         aiUnseen ? h('span', { style: style.greenDot }) : null,
         h('span', { style: style.sidebarTitle }, '待办清单'),
         // v1.1.3 修复③：AI 总结在途徽标（脉动，条目入列或 2 分钟超时后消失）
-        aiPending ? h('span', { style: style.aiPendingBadge }, '\u23f3 AI 整理中\u2026') : null,
+        // v1.5.0：改为脉动圆点（原先「⏳ AI 整理中…」文字徽标在 254px 侧栏里挤掉标题）
+        aiPending ? h('span', { style: style.aiPendingDot, title: 'AI 整理中…' }) : null,
 
         // 预期：橙色胶囊，与待完成拉开间距；整组往右留 marginRight，视觉上往左移
         expectedCount > 0 ? h('span', {
           style: {
-            fontSize: 11, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
-            padding: '2px 8px', borderRadius: 999,
+            fontSize: 10.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', flexShrink: 0,
+            padding: '1px 6px', borderRadius: 999,
             background: 'color-mix(in srgb, var(--dsw-alias-brand-primary, #f59e0b) 14%, transparent)',
             color: 'var(--dsw-alias-brand-primary, #f59e0b)',
-            marginRight: 6,
+            marginRight: 2,
           },
         }, `预期 ${expectedCount} 项`) : null,
+        // v1.5.0：导出入口。放在头部右侧，点击不触发面板收起（stopPropagation）
+        h('button', {
+          type: 'button',
+          title: '导出全部待办（HTML / Markdown / Excel / CSV / JSON）',
+          onClick: (e) => { e.stopPropagation(); setExportOpen(true) },
+          style: {
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            border: 'none', background: 'transparent', cursor: 'pointer',
+            color: 'var(--dsw-alias-label-secondary)', padding: '2px 2px', marginRight: 2,
+            lineHeight: 0, borderRadius: 4, flexShrink: 0,
+          },
+        }, h(IconExport, { size: 14 })),
         h('span', {
           style: {
             ...style.sidebarBadge,
-            padding: '2px 8px', borderRadius: 999,
+            padding: '2px 6px', borderRadius: 999,
             background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)',
-            marginRight: 2,
           },
-          }, pending.length > 0 ? `待完成 ${pending.length} 项` : '全部完成'),
+          }, pending.length > 0 ? `待完成 ${pending.length}` : '全部完成'),
       ),
       h('div', { style: { ...style.sidebarContent, maxHeight: open ? 600 : 0, opacity: open ? 1 : 0 } },
         h('div', { style: style.sidebarList },
@@ -1696,6 +1914,11 @@ function TodoSidebar({ todosApi, sessionOpen, createFollowupSession }) {
     settingsOpen ? h(SettingsPopup, {
       todosApi,
       onClose: () => setSettingsOpen(false),
+      showToast,
+    }) : null,
+    exportOpen ? h(ExportDialog, {
+      items,
+      onClose: () => setExportOpen(false),
       showToast,
     }) : null,
   )
@@ -1772,7 +1995,7 @@ h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'spac
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', { style: { fontSize: 16 } }, '📋'),
           h('span', { style: { fontSize: 15, fontWeight: 600 } }, '待办清单设置'),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.3.0'),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.0'),
         ),
         h('button', { type: 'button', onClick: onClose, style: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--dsh-alias-label-secondary)', padding: '4px 8px' } }, '×'),
       ),
@@ -1883,6 +2106,7 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
   const [collapsedGroups, setCollapsedGroups] = useState({}) // 折叠的分组 key→true
   const [aiDefaultReminder, setAiDefaultReminder] = useState('') // v1.1.2 AI 记录默认提醒时间
   const [sidebarEnabled, setSidebarEnabled] = useState(true) // v1.2.2 反馈⑤：左侧边栏显示开关
+  const [exportOpen, setExportOpen] = useState(false) // v1.5.0 导出对话框
   const [toast, setToastState] = useState(null)
   // 发布加固：toast/已保存 的定时器统一挂 ref，组件卸载时清掉（以前裸 setTimeout 卸载后仍会 setState）。
   const uiTimerRef = useRef({ toast: undefined, saved: undefined })
@@ -2004,6 +2228,7 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
         im: notifyIm,
         imBotId,
         imTargetId,
+        service: imBots.find((b) => b.botId === imBotId)?.service,
         aiDefaultReminder,
         sidebarEnabled, // v1.2.2 反馈⑤
       })
@@ -2130,10 +2355,22 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
     // 头部（参考 dsh-archive-manager）
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '16px 0', borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)' } },
       h('h2', { style: { fontSize: 20, fontWeight: 600, margin: 0 } }, '待办清单'),
-      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.3.0'),
+      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.0'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 'auto' } }, 'GitHub'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/issues', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none' } }, '问题反馈'),
-      h('a', { href: 'https://www.npmjs.com/package/dsh-todo-checklist', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none' } }, '检查更新'),
+      // v1.5.0：导出入口（放在头部，一眼能看到）
+      h('button', {
+        type: 'button',
+        onClick: () => setExportOpen(true),
+        title: '导出全部待办记录（HTML / Markdown / Excel / CSV / JSON）',
+        style: {
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          marginLeft: 12, padding: '4px 12px', fontSize: 12, cursor: 'pointer',
+          borderRadius: 6, border: '1px solid var(--dsw-alias-brand-primary, #f59e0b)',
+          background: 'transparent', color: 'var(--dsw-alias-brand-primary, #f59e0b)',
+        },
+      }, h(IconExport, { size: 13 }), '导出'),
+      h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/releases', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 8 } }, '检查更新'),
     ),
     h('p', { style: { fontSize: 13, color: 'var(--dsw-alias-label-secondary)', margin: '8px 0 16px' } }, '划词加待办清单 · AI 总结 · 定时提醒'),
     // 设置区（折叠式）
@@ -2398,6 +2635,12 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
         onConverted: () => { void refresh() },
         showToast,
       }) : null,
+      // v1.5.0 导出对话框（设置页内也能导出，范围可选）
+      exportOpen ? h(ExportDialog, {
+        items,
+        onClose: () => setExportOpen(false),
+        showToast,
+      }) : null,
       // v1.2.5 修复"设置页↗点击没反应"：showToast 只 setToast 但渲染树无出口——
       // 补上 toast 渲染（fixed 定位浮层，与侧栏同款样式）
       toast !== null ? h('div', { style: { ...style.toast, position: 'fixed', right: 20, bottom: 12, zIndex: 2147483646, pointerEvents: 'none' } }, toast) : null,
@@ -2480,6 +2723,10 @@ function TodoEditDialog({ item, todosApi, onClose, onSaved, onConvert, showToast
     // v1.1 标题清空：由内容自动重新总结；标题和内容都空才拦�
     if (cleanTitle.length === 0 && cleanContent.length === 0) { showToast('请填写标题或内容'); return }
     const payload = { id: item.id, title: cleanTitle, content, notifyPopup: popup, notifyIm: im, imBotId: botId, imTargetId: targetId }
+    if (im && botId) {
+      const svc = imBots.find((b) => b.botId === botId)?.service
+      if (svc) payload.imService = svc
+    }
     if (mode === 'once') {
       payload.dueAt = onceLocal
       payload.recurrence = null
@@ -2748,38 +2995,59 @@ function ConvertToTaskDialog({ item, todosApi, defaultWorkspaceId, onClose, onCo
   const confirm = useCallback(() => {
     const cron = buildCron()
     if (!cron) { showToast('请完成定时设置'); return }
-    if (tasksApiReady === false) {
-      showToast('未检测到「定时任务」插件（dsh-tasks）：请先安装并启用后再转换')
-      return
+    // v1.4.0 通用化：自装 dsh-tasks（HTTP）优先，官方 dsh-schedule 兜底
+    const fallbackToSchedule = async () => {
+      try {
+        const res = await todosApi.convertToSchedule({
+          sessionId: item.sessionId ?? '',
+          title: item.title,
+          prompt: item.content ?? item.title,
+          cron: { expression: cron, time_zone: 'Asia/Shanghai' },
+        })
+        if (res && res.ok) {
+          await todosApi.update({ id: item.id, handedToTasks: true })
+          try { window.dispatchEvent(new Event('dsh-todo:changed')) } catch { }
+          showToast('已转为定时任务（官方「自动化任务」）')
+          onConverted?.()
+          onClose()
+        } else {
+          showToast(`转换失败：${res?.error ?? '官方定时服务不可用'}`)
+        }
+      } catch (e) {
+        showToast(`转换失败：${e?.message ?? e}`)
+      }
     }
     void (async () => {
       setBusy(true)
       try {
-        const resp = await fetch('/dsh-tasks/api', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            title: item.title,
-            prompt: item.content ?? item.title,
-            cron,
-            enabled: true,
-            ...(workspaceId ? { workspaceId } : {}),
-          }),
-        })
-        if (resp.ok) {
-          await todosApi.update({ id: item.id, handedToTasks: true })
-          try { window.dispatchEvent(new Event('dsh-todo:changed')) } catch { }
-          showToast('已转为定时任务')
-          onConverted?.()
-          onClose()
-        } else {
-          let errMsg = `HTTP ${resp.status}`
-          try { errMsg = (await resp.json()).error ?? errMsg } catch { }
+        // 主路径：自装 dsh-tasks
+        if (tasksApiReady === true) {
+          const resp = await fetch('/dsh-tasks/api', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              title: item.title,
+              prompt: item.content ?? item.title,
+              cron,
+              enabled: true,
+              ...(workspaceId ? { workspaceId } : {}),
+            }),
+          })
+          if (resp.ok) {
+            await todosApi.update({ id: item.id, handedToTasks: true })
+            try { window.dispatchEvent(new Event('dsh-todo:changed')) } catch { }
+            showToast('已转为定时任务')
+            onConverted?.()
+            onClose()
+            return
+          }
+          // dsh-tasks 失败（404/5xx）→ 回退官方 schedule
           setTasksApiReady(false)
-          showToast(resp.status === 404
-            ? '未检测到「定时任务」插件（dsh-tasks）：请先安装并启用后再转换'
-            : `转换失败：${errMsg}`)
+          await fallbackToSchedule()
+          return
         }
+        // 未装 dsh-tasks → 直接官方 schedule 兜底
+        await fallbackToSchedule()
       } catch (e) {
         showToast(`转换失败：${e?.message ?? e}`)
       } finally { setBusy(false) }
@@ -2907,6 +3175,7 @@ function registerTodoUi(ctx, slots, todos, sidebarEnabled = true) {
     listImBots: (request) => unwrap(todos.listImBots(request)),
     // v1.1.6 反馈⑤：行内「�?�?AI 总结」——对已有待办重新�?AI 结构化并替换本条
     aiSummarizeItem: (request) => unwrap(todos.aiSummarizeItem(request)),
+    convertToSchedule: (request) => unwrap(todos.convertToSchedule(request)),
   }
   // v0.9.8 工作区与新建会话（反馈③⑤）
   /** 读取工作区列表：[{id,title,sessionIds}]�?*/
@@ -3160,6 +3429,7 @@ async function applyInner(ctx) {
     listImBots: (request) => unwrapGlobal(todos.listImBots(request)),
     // v1.1.6 反馈⑤：�?todosApi，补�?aiSummarizeItem
     aiSummarizeItem: (request) => unwrapGlobal(todos.aiSummarizeItem(request)),
+    convertToSchedule: (request) => unwrapGlobal(todos.convertToSchedule(request)),
   }
   // 发布加固：全局根幂等——重复 apply（插件重启/热重载）时先摘掉旧根，避免叠加第二个根与双份轮询。
   const GLOBAL_ROOT_ID = 'dsh-todo-global-root'

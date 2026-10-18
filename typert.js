@@ -28,6 +28,10 @@ const itemSchema = z.object({
   notifyIm: z.boolean().optional(),
   imSent: z.boolean().optional(),
   notifyMode: z.enum(['global', 'popup', 'im', 'none']).optional(),
+  // v1.4.0 单条机器人来源（通用化：多投递服务精准路由；与服务名一起持久化）
+  imBotId: z.string().max(128).optional(),
+  imTargetId: z.string().max(128).optional(),
+  imService: z.string().max(64).optional(),
   // v1.0 周期提醒
   recurrence: z.object({
     type: z.enum(['daily', 'weekly']),
@@ -55,6 +59,7 @@ const listResultSchema = z.object({
       im: z.boolean().optional(),
       imBotId: z.string().max(100).optional(),
       imTargetId: z.string().max(100).optional(),
+      service: z.string().max(64).optional(),
     }).strict().optional(),
     aiDefaultReminder: z.string().max(20).optional(),
   }).strict().optional(),
@@ -77,6 +82,7 @@ const addRequestSchema = z.object({
   notifyIm: z.boolean().optional(),
   imBotId: z.string().max(128).optional(),
   imTargetId: z.string().max(128).optional(),
+  imService: z.string().max(64).optional(),
   sessionId: z.string().optional(),
   messageId: z.string().optional(),
   anchorText: z.string().max(120).optional(),
@@ -122,6 +128,7 @@ const updateRequestSchema = z.object({
   notifyIm: z.boolean().optional(),
   imBotId: z.string().max(128).optional(),
   imTargetId: z.string().max(128).optional(),
+  imService: z.string().max(64).optional(),
   handedToTasks: z.boolean().optional(),
   reminded: z.boolean().optional(),
 }).strict()
@@ -132,6 +139,7 @@ const saveNotifyConfigRequestSchema = z.object({
   im: z.boolean().optional(),
   imBotId: z.string().max(100).optional(),
   imTargetId: z.string().max(100).optional(),
+  service: z.string().max(64).optional(),
   // v1.1.2 AI 记录默认提醒时间枚举
   aiDefaultReminder: z.string().max(20).optional(),
   // v1.2.2 反馈⑤：左侧边栏显示开关
@@ -173,6 +181,38 @@ const createFollowupResultSchema = z.object({
   value: z.object({ sessionId: z.string().min(1) }).strict().optional(),
 }).strict()
 
+// v1.4.0 convertToSchedule：转官方定时任务（自装 dsh-tasks 优先、官方 dsh-schedule 兜底）
+// selector 与官方 schedule.create 的 request 同构（snake_case），六选一
+const scheduleDailySchema = z.object({
+  time: z.string().min(1),
+  time_zone: z.string().min(1),
+}).strict()
+const scheduleWeeklySchema = z.object({
+  time: z.string().min(1),
+  time_zone: z.string().min(1),
+  weekdays: z.array(z.number().int().min(1).max(7)).min(1),
+}).strict()
+const scheduleCronSchema = z.object({
+  expression: z.string().min(1),
+  time_zone: z.string().min(1),
+}).strict()
+const convertToScheduleRequestSchema = z.object({
+  sessionId: z.string().optional(),
+  title: z.string().min(1).max(120),
+  prompt: z.string().min(1),
+  at: z.string().optional(),
+  after_seconds: z.number().int().min(60).optional(),
+  every_seconds: z.number().int().min(60).optional(),
+  daily: scheduleDailySchema.optional(),
+  weekly: scheduleWeeklySchema.optional(),
+  cron: scheduleCronSchema.optional(),
+}).strict()
+const convertToScheduleResultSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional(),
+  value: z.object({ scheduleId: z.string().min(1) }).strict().optional(),
+}).strict()
+
 // v0.9.7 listModels：返回 DSH 已配置模型（按 provider 分组）+ 当前默认
 const modelInfoSchema = z.object({
   id: z.string().min(1),
@@ -200,6 +240,7 @@ const imTargetSchema = z.object({
 const imBotSchema = z.object({
   botId: z.string().min(1),
   channel: z.string().optional(),
+  service: z.string().max(64).optional(),
   targets: z.array(imTargetSchema),
 }).strict()
 const listImBotsResultSchema = z.object({
@@ -237,6 +278,8 @@ const createFollowupRequestCodec = strictCodec('TodoCreateFollowupRequest', crea
 const createFollowupResultCodec = strictCodec('TodoCreateFollowupResult', createFollowupResultSchema)
 const listModelsResultCodec = strictCodec('TodoListModelsResult', listModelsResultSchema)
 const listImBotsResultCodec = strictCodec('TodoListImBotsResult', listImBotsResultSchema)
+const convertToScheduleRequestCodec = strictCodec('TodoConvertToScheduleRequest', convertToScheduleRequestSchema)
+const convertToScheduleResultCodec = strictCodec('TodoConvertToScheduleResult', convertToScheduleResultSchema)
 const okResultCodec = strictCodec('TodoOkResult', okResultSchema)
 
 function invocation(method, parameterCodec, resultCodec) {
@@ -283,6 +326,7 @@ export const TYPERT = {
           { kind: 'method', name: 'markSeen', signature: 'markSeen(request: {}): Promise<TodoOkResult>' },
           { kind: 'method', name: 'listModels', signature: 'listModels(request: {}): Promise<TodoListModelsResult>' },
           { kind: 'method', name: 'listImBots', signature: 'listImBots(request: {}): Promise<TodoListImBotsResult>' },
+          { kind: 'method', name: 'convertToSchedule', signature: 'convertToSchedule(request: TodoConvertToScheduleRequest): Promise<TodoConvertToScheduleResult>' },
         ],
         types: [],
       },
@@ -308,6 +352,7 @@ export const TYPERT = {
     invocation('markSeen', listRequestCodec, okResultCodec),
     invocation('listModels', listRequestCodec, listModelsResultCodec),
     invocation('listImBots', listRequestCodec, listImBotsResultCodec),
+    invocation('convertToSchedule', convertToScheduleRequestCodec, convertToScheduleResultCodec),
   ],
 }
 

@@ -32,6 +32,8 @@ const itemSchema = z.object({
   /** v1.1 单条机器人指定（留空=跟随全局/全部机器人）。 */
   imBotId: z.string().max(128).optional(),
   imTargetId: z.string().max(128).optional(),
+  /** v1.4.0 单条机器人来源服务名（通用化：多 bot 投递服务时精准路由；缺省=跟随全局/遍历候选）。 */
+  imService: z.string().max(64).optional(),
   /** 机器人推送是否已发送（防重复，内部维护）。 */
   imSent: z.boolean().optional(),
   /** 旧版单值通知方式（仅兼容读取；编辑后迁移到 notifyPopup/notifyIm）。 */
@@ -80,6 +82,8 @@ const configSchema = z.object({
     im: z.boolean().optional(),
     imBotId: z.string().max(100).optional(),
     imTargetId: z.string().max(100).optional(),
+    /** v1.4.0 全局默认机器人来源服务名（通用化：多 bot 投递服务时精准路由；缺省=dshIm）。 */
+    service: z.string().max(64).optional(),
   }).optional(),
   /**
    * v1.1.2 修复①：host/index.js saveNotifyConfig 会写入 aiDefaultReminder，
@@ -164,6 +168,7 @@ export const salvageConfig = (raw) => {
     if (typeof notify.im === 'boolean') next.im = notify.im
     if (typeof notify.imBotId === 'string') next.imBotId = notify.imBotId.slice(0, 100)
     if (typeof notify.imTargetId === 'string') next.imTargetId = notify.imTargetId.slice(0, 100)
+    if (typeof notify.service === 'string') next.service = notify.service.slice(0, 64)
     if (Object.keys(next).length > 0) out.notify = next
   }
   if (typeof raw.aiDefaultReminder === 'string') out.aiDefaultReminder = raw.aiDefaultReminder.slice(0, 20)

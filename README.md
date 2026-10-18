@@ -1,183 +1,266 @@
-# dsh-todo-checklist ·「待办清单」
+<div align="center">
 
-DeepSeek Harness（DSH）的待办插件：**把对话里冒出来的待办沉淀下来**。
+# ✅ dsh-todo-checklist
 
-[![Platform](https://img.shields.io/badge/platform-DeepSeek%20Harness-blue)](#环境要求) [![Version](https://img.shields.io/badge/version-1.3.0-green)](#功能) [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](#许可)
+**Todos that come out of the conversation — not another app you have to remember to open.**
 
-> Todo sidecar plugin for DeepSeek Harness: capture todos straight from the conversation, review them in a left sidebar panel, and get due reminders via in-app popup or IM bot push. Data persists across restarts.
+*Selection to todo · chat-captured todos · left sidebar panel · due reminders · one-click export*
 
----
+[![version](https://img.shields.io/github/v/tag/qgd1850890306-rgb/dsh-todo-checklist?label=version&color=f59e0b)](https://github.com/qgd1850890306-rgb/dsh-todo-checklist/releases)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![node](https://img.shields.io/badge/node-%5E22.19%20%7C%7C%20%3E%3D24-brightgreen.svg)](#)
+[![dsh-plugin](https://img.shields.io/badge/dsh--plugin-✅-green)](https://github.com/topics/dsh-plugin)
+[![dsh](https://img.shields.io/badge/dsh-%3E%3D0.2.0--rc.1-f59e0b)](#)
 
-## 它能帮你做什么
+[简体中文](./README-zh.md) · **English**
 
-- **划词加待办** —— 选中对话里的一句话，点「＋ 待办」，一句话变成一条待办
-- **AI 记录待办** —— 把划词内容交给模型，自动拆成 标题 / 内容 / 提醒时间
-- **对话自动记录** —— 说「记一下……」，模型调用内置工具 `todo_add` 写入
-- **侧栏汇总** —— 左侧面板统一查看、搜索、筛选、勾选、分组
-- **到期提醒** —— 到点弹**应用内提醒**，或推送到你的 **DSH-IM 机器人**
-- **数据不丢** —— 重启 DSH 数据还在；单条数据损坏只影响该条，不影响整体
-
----
-
-## 快速上手（3 步）
-
-1. **安装**：左侧栏 → 插件 → 添加插件 → 填 `dsh-todo-checklist` → **完全退出并重启 DSH**
-2. **加一条**：在任意对话里选中一句话 → 点「＋ 待办」→ 选「🤖 AI 记录待办」或手动填写
-3. **看与处理**：点左侧图标列底部的「待办清单」展开；勾选完成、双击跳回原句、到期自动提醒
+</div>
 
 ---
 
-## 截图
+## 🎯 What it does · 它能做什么
 
-### ① 划词气泡 —— 选中一句话，点「＋ 待办」
+Most todo lists fail for the same reason: **the thought appears while you are working, not while you are in a todo app.** You are mid-conversation with the model, it says "you should also check the RoHS report expiry", you nod — and it is gone.
 
-在任意对话里选中文字，出现「＋ 待办」气泡：
+This plugin removes that gap. It lives inside DeepSeek Harness and captures the todo **at the moment the sentence appears**, in four ways:
 
-![划词气泡](docs/screenshots/bubble.png)
+| You do this | The todo appears |
+|---|---|
+| Select any sentence in a reply → click **＋ Todo** | Opens a card where AI fills in title / content / reminder, or you type it yourself |
+| Say "**note this down: …**" / "**remind me Friday**" in chat | The model calls the built-in `todo_add` tool and writes it directly |
+| Finish a conversation | Unfinished intents in the exchange are captured automatically |
+| Ask "**what's on my list?**" | The model calls `todo_list` and answers from the same data you see |
 
-### ② 记录弹窗 —— 手动填写，或交给 AI 整理
-
-点气泡打开记录弹窗：可手动填写标题 / 内容 / 提醒时间，也可点「🤖 AI 记录待办」把这段话交给模型自动整理（含分段式提醒时间输入，点哪段 ± 就加哪段）：
-
-![记录弹窗](docs/screenshots/popup.png)
-
-### ③ 左侧面板 —— 汇总、搜索、勾选、跳回原句
-
-待办收纳在左侧图标列底部「待办清单」，展开即可查看与处理：
-
-![左侧面板](docs/screenshots/sidebar.png)
+Everything lands in **one sidebar panel** on the left edge — the same place every session, so reviewing costs a glance instead of an app switch.
 
 ---
 
-## 功能
+## 📸 Screenshots · 界面截图
 
-| 功能 | 说明 |
-|------|------|
-| 划词加入待办 | 对话里选中文字 → 出现「＋ 待办」气泡 → 弹窗：**🤖 AI 记录待办**（把这段话交给模型整理成标题 / 内容 / 提醒时间，整理中面板显示「⏳ AI 整理中」）或手动填写 |
-| 对话自动记录 | 对话里说「记一下……」模型可调用内置工具 `todo_add` 写入；`todo_list` 用于查询现有待办 |
-| 左侧栏面板 | 挂在官方左侧图标列底部：收纳态显示「待办清单 · 预期 N 项 · 待完成 N 项」，展开为列表；含搜索、全部提醒筛选、未完成 / 已完成 / 已放弃 / 逾期 分组 |
-| 到期提醒 | 每 30 秒扫描：到点弹**应用内提醒**（可「知道了 / 查看 / 完成」，查看会跳回划词所在会话并高亮原句），或经 **DSH-IM 机器人推送**（可全局设置，也可单条待办覆盖机器人 / 目标） |
-| 待办处理 | 勾选完成；双击标题或点 ↗ 新建会话（自动带上来源会话的工作区与模型，发送后该待办自动完成）；行内图标：编辑 / 转 AI 总结 / 删除 |
-| 编辑与延期 | 编辑标题、内容、提醒时间（**分段式输入：年 / 月 / 日 / 时 / 分，点哪段 ± 就加哪段**，分 ±30 分钟、时 ±1、日 ±1、月 ±1、年 ±1，自动进位）；延期三档：+1 天、下周一 09:00、自定义 |
-| 转 AI 总结 | 把已有待办交给模型重新整理成结构化内容，并替换原条目 |
-| 转定时任务 | 把待办转成周期性定时任务（**需已安装「定时任务」dsh-tasks 插件**，未安装时会给明确提示） |
-| 持久保存 | 个人存储域 `dsh_todo_sidecar_items`，重启 DSH 不丢；单条数据损坏只影响该条，不会让整个插件不可用 |
+**The panel: always there, collapsed to a single line until you need it**
+
+![Sidebar panel](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/sidebar.png)
+
+**Select text → a small bubble appears → AI turns the sentence into a structured todo**
+
+<table>
+<tr>
+<td width="50%"><img src="https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/bubble.png" alt="Selection bubble"><br><sub><b>① Select any sentence</b> — the <code>＋ Todo</code> bubble follows the selection</sub></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/capture.png" alt="AI capture card"><br><sub><b>② The capture card</b> — AI prefills title, content and reminder; every field stays editable</sub></td>
+</tr>
+</table>
+
+**Export: eight records in, one self-contained file out — pick the format by who reads it**
+
+![Export dialog](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/export.png)
+
+**Settings page: model, reminder channel, sidebar toggle, and the full record list with four tabs**
+
+![Settings page](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/settings.png)
+
+**The whole window, for context**
+
+![Overview](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/overview.png)
 
 ---
 
-## 环境要求
+## 🚀 Quick start · 快速上手
 
-- DSH `>= 0.2.0-rc.1`（已测 `0.2.0-rc.1`、`0.2.0-rc.2`）
-- Node.js `>= 22.18.0`
-- 桌面端或 Web 端均可（客户端面声明 `platform: web`）
-- **零运行时依赖**：宿主面已打包成自包含文件（`lib/host.js`、`lib/typert.js`，zod 已内联），安装时不需要下载任何依赖，离线 / 本地目录 / npm / tarball 四种装法都一致可用。
+1. **Install** — open DSH → sidebar → **Plugins** → **Add plugin** → enter `dsh-todo-checklist` → **fully quit and restart DSH**.
+2. **Capture one** — in any conversation, select a sentence → click **＋ Todo** → let AI fill it, or type it yourself → **Save**.
+3. **Review it** — click **Todo checklist** at the bottom of the left icon rail. Tick it off, double-click to jump back to the original sentence, or let the reminder fire.
+
+That is the whole loop. Nothing to sign up for, no separate server.
 
 ---
 
-## 安装
+## ✨ Features · 功能一览
 
-**方式一：插件管理器（推荐）**
-DSH 左侧栏 → **插件** → **添加插件** → 填入 `dsh-todo-checklist` → 安装完成后**完全退出并重启 DSH**。
+| Feature | What it actually does |
+|---|---|
+| **Selection → todo** | Select text in any reply → `＋ Todo` bubble → modal with **AI capture** (model rewrites the passage into title / content / reminder) or manual entry |
+| **Chat-captured todos** | Say "note this down" and the model calls `todo_add` with `source: "model"`; `todo_list` answers list questions from the same store |
+| **Left sidebar panel** | Docked at the bottom of the official icon rail. Collapsed it shows `Todo checklist · expected N · pending N`; expanded it is a full list with search, due-filter, and four tabs (Pending / Completed / Abandoned / Overdue) |
+| **Due reminders** | Scans every 30 s. Fires an **in-app popup** (Acknowledge / View / Complete — View jumps back to the source session and highlights the original sentence) or pushes through your **DSH-IM bot** (global default, overridable per todo) |
+| **Export** | HTML · Markdown · Excel (.xlsx) · CSV · JSON, each over all records or a filtered scope — see [below](#-export--导出) |
+| **Editing & deferring** | Edit title, content, reminder time (**segmented year / month / day / hour / minute input** — click a segment, then ± steps that segment only; minutes ±30, others ±1, auto carry); defer by +1 day, next Monday 09:00, or a custom time |
+| **AI re-summarise** | Hand an existing todo back to the model to be rewritten as structured content, replacing the entry in place |
+| **Convert to scheduled task** | Turn a todo into a recurring task (needs the `dsh-tasks` plugin; falls back to the built-in scheduler, or tells you clearly when neither is available) |
+| **Follow-up session** | Double-click a title or click ↗ to open a new session with the todo content prefilled, inheriting the **workspace and model of the session the todo came from**; the todo completes itself once you send |
+| **Persistence** | Personal storage domain `dsh_todo_sidecar_items`, survives restarts. A single corrupted record is salvaged/dropped on its own — it never takes the whole plugin down |
 
-**方式二：命令行**
+---
+
+## 📤 Export · 导出
+
+Version 1.5.0 added export. The design goal was simple: **the same records must be readable by a human and by an AI, and you should not have to convert anything by hand.**
+
+Click **导出 / Export** — in the sidebar header or on the settings page — then pick a format and a scope.
+
+**Formats** (`给人看` = for humans, `给 AI 看` = for AI):
+
+| Format | Best for | Notes |
+|---|---|---|
+| **HTML** | Humans | One self-contained `.html` file. Double-click to open, print to PDF, no internet needed. Escapes all content (XSS-safe), follows dark mode, has a print stylesheet |
+| **Markdown** | Both | Plain text with headings and checkboxes. Paste into any notes app, or feed whole to an AI |
+| **Excel (.xlsx)** | Humans | A real `.xlsx` (OOXML, 14 columns, frozen header row) — opens in Excel / WPS / Numbers and supports filter and sort. **No third-party library**: the ZIP container is written by hand, so the plugin stays dependency-free |
+| **CSV** | AI | Universal plain text. UTF-8 **with BOM**, so Excel opens Chinese correctly; RFC-style quoting for commas, quotes and newlines |
+| **JSON** | AI | Complete structured records, every field present — the best shape for precise machine parsing |
+
+**Scopes**: all records (default) · pending only · completed only · abandoned only · overdue only.
+
+**Two things worth knowing:**
+
+- The export **only contains the list itself** — titles, contents, times, statuses, AI summaries, source sessions. It does **not** contain the original conversation text. Nothing leaves your machine.
+- The formatting logic lives in one shared module (`shared/export-core.js`) used by **both** the UI and the host tool. So the file you download and the text an AI gets from `todo_export` are produced by exactly the same code — no drift between the two.
+
+**For AI agents**, there is a matching host tool:
+
+```
+todo_export({ format: "md" | "csv" | "json" | "html", scope: "all" | "pending" | "done" | "abandoned" | "overdue" })
+```
+
+Ask the model to "export all my todos as Markdown" and it returns the text directly in the conversation. (`.xlsx` is binary, so the tool returns a hint to use the UI button instead — a deliberate boundary, not a missing feature.)
+
+---
+
+## 🧩 Requirements · 环境要求
+
+- **DSH** `>= 0.2.0-rc.1`. Tested on `0.2.0-rc.1`, `0.2.0-rc.2`, **`0.2.1-rc.2`**.
+- **Node.js** `^22.19.0 || >=24.0.0` (declared in `engines`; the desktop runtime ships Node 24).
+- Desktop or Web — the client face declares `platform: web`.
+- **Zero runtime dependencies.** The host face is pre-bundled into self-contained files (`lib/host.js`, `lib/typert.js`, zod inlined). There is nothing to download at install time, so `link:`, offline, tarball and npm installs all behave identically.
+
+---
+
+## 📦 Install · 安装
+
+**Option 1 — Plugin manager (recommended)**
+
+DSH sidebar → **Plugins** → **Add plugin** → enter `dsh-todo-checklist` → **fully quit and restart DSH** afterwards.
+
+**Option 2 — Command line**
 
 ```bash
 dsh plugin --profile desktop add dsh-todo-checklist
 ```
 
-**方式三：本地目录 / tarball**（未发布或内网环境）
+**Option 3 — Straight from GitHub** (the built `lib/` is committed, so no build step is needed)
 
 ```bash
-dsh plugin --profile desktop add <本地目录或 tgz 的绝对路径>
+dsh plugin --profile desktop add https://github.com/qgd1850890306-rgb/dsh-todo-checklist.git
 ```
 
-升级到最新版：
+**Option 4 — Local directory or tarball** (offline / intranet)
+
+```bash
+dsh plugin --profile desktop add <absolute path to directory or .tgz>
+```
+
+Upgrade / uninstall:
 
 ```bash
 dsh plugin --profile desktop add dsh-todo-checklist@latest
-```
-
-卸载：
-
-```bash
 dsh plugin --profile desktop remove dsh-todo-checklist
 ```
 
-> 客户端界面部分的改动需要**重启 DSH** 才会生效。
-
-安装成功的标志：打开任意会话，左侧图标列底部出现「待办清单」。
-
----
-
-## 使用
-
-- **加待办**：选中对话文字 → 点「＋ 待办」→ 选「🤖 AI 记录待办」让模型整理，或手动填标题 / 内容 / 提醒时间。
-- **设提醒时间**：单次模式下，**点「年 / 月 / 日 / 时 / 分」任一段，再点 − / ＋ 按钮**，就在该段上步进（分 ±30、其余 ±1）；键盘 ↑ / ↓ 同样步进，← / → 切换段。
-- **看与改**：点左侧「待办清单」展开；勾选完成；行内 ✎ 编辑、✦ 转 AI 总结、✕ 删除；⋯ 菜单为编辑 / 删除。
-- **到点提醒**：默认弹应用内提醒；要在设置页勾选「DSH-IM 推送」后才会同时推送到机器人（需先装 dsh-im 并配置好机器人）。
-- **新建会话**：双击待办标题，或点行内 ↗，会新建一个会话并把待办内容预填进输入框；新会话沿用**划词时那个会话的工作区与模型**，发送后该待办自动标记完成。
+> Client-side UI changes only take effect after a **restart of DSH**.
+> **Success looks like:** the left icon rail gains a **Todo checklist** entry.
 
 ---
 
-## 数据、隐私与权限
+## 🕹 Usage · 使用
 
-- **数据位置**：`<DSH_HOME>/storages/dsh_todo_sidecar_items.json`（默认 `<DSH_HOME>` 为 `~/.dsh`）。卸载插件不会删除该文件，需要清空可手动删除。
-- **网络**：插件自身不发起任何外部网络请求；只有在你启用「DSH-IM 推送」时，才会通过本机 DSH-IM 服务把提醒发给你已配置的机器人。
-- **日志**：默认不写任何日志文件。排障时设环境变量 `DSH_TODO_DEBUG=1`，日志写入 `<DSH_HOME>/dsh-todo/diag.jsonl`（可用 `DSH_TODO_STATE_DIR` 改目录）。
-- **能力使用**：会话事件只读（用于到期提醒与自动完成）、按需创建会话（AI 记录 / 新建会话）、读取工作区列表、调用模型（AI 记录与 AI 总结）、调用 DSH-IM 发消息。
-
----
-
-## 已知限制
-
-- **提醒依赖 DSH 正在运行**：插件没有后台常驻进程，DSH 退出期间到点的提醒会在下次启动后补发。
-- **机器人推送依赖 dsh-im**：未安装或未配置机器人时，推送不可用（应用内弹窗不受影响）。
-- **转定时任务依赖 dsh-tasks**：未安装时无法转换，会给出提示。
-- **AI 记录 / AI 总结会产生一次模型调用**（按你当前配置的模型计费）。
-- 多个 DSH 实例同时运行时，同一条待办的机器人推送只会发出一次（跨进程原子认领）。
+- **Add** — select text → `＋ Todo` → **AI capture** or fill in title / content / reminder.
+- **Set a reminder** — in single-shot mode, **click the year / month / day / hour / minute segment you want, then press − / ＋**: only that segment steps (minutes ±30, everything else ±1). Keyboard ↑ / ↓ steps, ← / → switches segments. Or use a preset: in 1 hour / tomorrow 09:00 / tomorrow 17:00 / weekday 09:00 / next Monday 09:00.
+- **Repeat** — switch to **Daily** or **Weekly** and pick the weekday and time.
+- **Review & act** — click **Todo checklist** to expand; tick to complete; ✎ edit, ✦ re-summarise with AI, ✕ delete; the `⋯` menu holds edit / delete.
+- **Jump back** — double-click a title (or ↗) to open a follow-up session; the new session inherits the original workspace and model, and the todo completes itself after you send.
+- **Export** — click **导出 / Export** in the panel header or on the settings page.
+- **Notification channel** — defaults to the in-app popup; tick **DSH-IM push** on the settings page to also push to a bot (requires `dsh-im` installed and a bot configured).
 
 ---
 
-## 故障排查
+## 🔒 Data, privacy & permissions · 数据、隐私与权限
 
-- 打开 **F12 → Console**：
-  - `__DSH_TODO_FOLLOWUP_TRACE__` —— 最近一次「新建会话」链路的逐步打点（工作区解析、RPC、打开会话）。
-  - `__DSH_TODO_ENTRY_ERROR__` —— 界面槽位渲染异常记录。
-- 提示「存储不可用」=待办数据文件无法解析，检查 `<DSH_HOME>/storages/dsh_todo_sidecar_items.json` 是否为合法 JSON。
-- 提示「插件刚更新过：请重启 DSH 桌面端后重试」=宿主与界面的方法清单不一致，重启即可。
-- 修改了「在左侧边栏显示待办清单」开关后，需要重启 DSH 生效。
+- **Where the data lives** — `<DSH_HOME>/storages/dsh_todo_sidecar_items.json` (`<DSH_HOME>` defaults to `~/.dsh`). Uninstalling the plugin does **not** delete this file; delete it manually to wipe.
+- **Network** — the plugin makes **no external network requests of its own**. Only when you enable DSH-IM push does it hand a reminder to your local DSH-IM service for a bot you configured.
+- **Logs** — nothing is written by default. For support, set `DSH_TODO_DEBUG=1` and logs go to `<DSH_HOME>/dsh-todo/diag.jsonl` (directory overridable via `DSH_TODO_STATE_DIR`).
+- **Capabilities used** — read session events (for reminders and auto-complete), create sessions on demand (AI capture / follow-up), list workspaces, call the model (AI capture and AI summarise), send via DSH-IM.
+- **Export** — files are generated in your browser and saved through the normal download path. Nothing is uploaded.
 
 ---
 
-## 开发
+## ⚠️ Known limitations · 已知限制
+
+- **Reminders need DSH running.** There is no background daemon; reminders that come due while DSH is closed are delivered on the next start.
+- **Bot push needs `dsh-im`.** Without it (or without a configured bot) push is unavailable; the in-app popup is unaffected.
+- **Convert-to-scheduled-task needs `dsh-tasks`**, falling back to the built-in scheduler when available.
+- **AI capture and AI summarise each cost one model call** (billed to whatever model you configured).
+- When several DSH instances run at once, a bot push for the same todo is sent only once (cross-process atomic claim).
+- **Not yet in the plugin marketplace index** — install by package name, GitHub URL, or the plugin manager as above.
+
+---
+
+## 🩺 Troubleshooting · 故障排查
+
+Open **F12 → Console**:
+
+- `__DSH_TODO_FOLLOWUP_TRACE__` — step-by-step trace of the last "open follow-up session" chain (workspace resolution, RPC, session open).
+- `__DSH_TODO_ENTRY_ERROR__` — records any slot render failure.
+
+Common messages:
+
+| Message | Meaning |
+|---|---|
+| 「存储不可用」 | The todo data file cannot be parsed — check that `<DSH_HOME>/storages/dsh_todo_sidecar_items.json` is valid JSON |
+| 「插件刚更新过：请重启 DSH 桌面端后重试」 | Host and client method lists disagree — restart DSH |
+| Sidebar toggle had no effect | The "show in left sidebar" switch needs a DSH restart |
+
+---
+
+## 🛠 Development · 开发
 
 ```
 dsh-todo-checklist/
-├── package.json          # dsh.bundle / dsh.client / dshhub 展示信息 / compatibility
-├── cordis.patch.yml      # profile 配置层：插入 todo-sidecar 宿主插件
-├── typert.js             # 宿主面 Typert 清单源码（strict codec，loader 自动发现）
+├── package.json           # dsh.bundle / dsh.client / dshhub metadata / compatibility
+├── cordis.patch.yml       # profile config layer: inserts the todo-sidecar host plugin
+├── icon.svg               # plugin icon (also exported as ./icon)
+├── locale/                # display metadata: en.json, zh.json (meta.title / meta.description)
+├── typert.js              # host-side Typert manifest source (strict codecs, auto-discovered)
 ├── host/
-│   ├── index.js          # todos 服务、AI 记录、提醒引擎、todo_add / todo_list 工具
-│   └── store.js          # 存储域与容错解析
-├── client-src/index.js   # 客户端可读源码（手写 h()，无 JSX）
+│   ├── index.js           # todos service, AI capture, reminder engine, todo_add / todo_list / todo_export
+│   └── store.js           # storage domain + tolerant parsing/salvage
+├── shared/
+│   └── export-core.js     # format builders shared by client and host (markdown/html/csv/json/xlsx)
+├── client-src/
+│   ├── index.js           # client source (hand-written h(), no JSX)
+│   ├── export.js          # thin client shell: re-exports core + browser download
+│   └── segment-due-input.js
 ├── scripts/
-│   ├── build-client.mjs  # esbuild → lib/client.js 工厂包
-│   ├── build-host.mjs    # esbuild → lib/host.js、lib/typert.js（内联 zod，零依赖）
-│   └── release-pack.mjs  # 打发布包：换名 + 重建产物 + 自检
+│   ├── build-client.mjs   # esbuild → lib/client.js factory bundle
+│   ├── build-host.mjs     # esbuild → lib/host.js, lib/typert.js (zod inlined, zero deps)
+│   └── release-pack.mjs   # publish packaging: rename + rebuild + self-check
 └── lib/
-    ├── client.js         # window.__ModuleLoader__.load({ id, factory }) 产物
-    ├── host.js           # 宿主面入口（package.json 的 main）
-    └── typert.js         # Typert 清单产物（exports["./typert"]）
+    ├── client.js          # window.__ModuleLoader__.load({ id, factory }) output
+    ├── host.js            # host entry (package.json "main")
+    └── typert.js          # Typert manifest output (exports["./typert"])
 ```
 
-- 构建全部产物：`node scripts/build-host.mjs && node scripts/build-client.mjs`（也可 `npm run build`）；模块 id 恒等于包名，与官方插件一致。
-- 宿主面改动后必须重新 `build-host.mjs`——运行时读的是 `lib/host.js`，不是 `host/index.js`。
-- `dependencies` 故意留空（zod 只在构建期需要，放在 `devDependencies`）：这样 `link:` 安装、离线安装都不会因为缺依赖导致插件激活失败。
-- 打发布包（换名 + 重建产物 + 自检）：`node scripts/release-pack.mjs --name <npm包名>`。
-- 变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
+- Build everything: `node scripts/build-host.mjs && node scripts/build-client.mjs` (or `npm run build`). The module id always equals the package name, matching official plugins.
+- **Host changes require `build-host.mjs`** — the runtime loads `lib/host.js`, never `host/index.js`.
+- `dependencies` is deliberately empty (zod is needed only at build time and sits in `devDependencies`), so `link:` and offline installs cannot fail on a missing dependency.
+- Package for release (rename + rebuild + self-check): `node scripts/release-pack.mjs --name <npm package name>`.
+- Official checks: `dsh-plugin-dev check` (static, 16 rules) and `dsh-plugin-dev verify` (pack → install into a clean profile → smoke → uninstall).
 
 ---
 
-## 许可
+## 📝 Changelog · 更新日志
+
+See [CHANGELOG.md](./CHANGELOG.md). Recent: **1.5.0** adds export (HTML / Markdown / Excel / CSV / JSON) plus the `todo_export` tool; **1.4.0** generalised bot push and scheduled-task conversion.
+
+---
+
+## 📄 License · 许可
 
 MIT

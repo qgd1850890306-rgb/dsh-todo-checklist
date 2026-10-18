@@ -46,6 +46,8 @@ storeSrc = storeSrc.replace("import { defineDomain } from '@deepseek-ai/dsh-stor
 fs.writeFileSync(STORE_TMP, storeSrc, 'utf8')
 let hostSrc = fs.readFileSync(path.join(PLUGIN, 'host', 'index.js'), 'utf8')
 hostSrc = hostSrc.replaceAll("'./store.js'", "'./_h_store.mjs'")
+// shim 落在包根（PLUGIN/_h_host.mjs），源码里的 '../shared/export-core.js' 要改成本层相对路径
+hostSrc = hostSrc.replaceAll("'../shared/export-core.js'", "'./shared/export-core.js'")
 hostSrc = hostSrc.replace("import { defineTool } from '@deepseek-ai/dsh-tools'", 'const defineTool = (spec) => spec')
 fs.writeFileSync(HOST_TMP, hostSrc, 'utf8')`
 

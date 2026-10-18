@@ -90,7 +90,7 @@ try { mod.apply(a.ctx) } catch (error) { applyThrew = error }
 check('A1 apply 同步完成不抛错', applyThrew === null, applyThrew ? String(applyThrew.message) : '')
 const svc = a.provided.get('todos')
 check('A2 注册了 todos 服务', svc !== undefined && typeof svc.add === 'function')
-check('A3 注册 2 个模型工具', a.tools.length === 2 && a.tools.map((t) => t.name).join(',') === 'todo_add,todo_list', a.tools.map((t) => t.name).join(','))
+check('A3 注册 3 个模型工具', a.tools.length === 3 && a.tools.map((t) => t.name).join(',') === 'todo_add,todo_list,todo_export', a.tools.map((t) => t.name).join(','))
 check('A4 注册提示词片段（order 6000）', a.sections.length === 1 && a.sections[0].order === 6000 && a.sections[0].interpolate === false)
 check('A5 订阅 session/event', a.listeners.some((l) => l.ev === 'session/event'))
 check('A6 只声明必需硬依赖', JSON.stringify(mod.inject) === JSON.stringify(['tools', 'systemPrompt', 'storageDomain']), JSON.stringify(mod.inject))
@@ -154,7 +154,7 @@ let applyThrewC = null
 try { mod.apply(c.ctx) } catch (error) { applyThrewC = error }
 check('C1 存储坏了 apply 仍不抛（不拖垮 boot）', applyThrewC === null, applyThrewC ? String(applyThrewC.message) : '')
 const svcC = c.provided.get('todos')
-check('C2 工具仍注册（插件其余功能可用）', c.tools.length === 2)
+check('C2 工具仍注册（插件其余功能可用）', c.tools.length === 3, c.tools.map((t) => t.name).join(','))
 const listC = await svcC.list({})
 check('C3 读返回可读错误', listC.ok === false && String(listC.error).includes('存储不可用'), String(listC.error))
 const addC = await svcC.add({ title: '写入应失败' })
