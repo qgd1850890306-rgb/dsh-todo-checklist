@@ -50,9 +50,9 @@ Everything lands in **one sidebar panel** on the left edge — the same place ev
 </tr>
 </table>
 
-**Export: eight records in, one self-contained file out — pick the format by who reads it**
+**Export: a collapsible section on the settings page — eight records in, one self-contained file out, pick the format by who reads it**
 
-![Export dialog](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/export.png)
+![Export section](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/export.png)
 
 **Settings page: model, reminder channel, sidebar toggle, and the full record list with four tabs**
 
@@ -95,7 +95,7 @@ That is the whole loop. Nothing to sign up for, no separate server.
 
 Version 1.5.0 added export. The design goal was simple: **the same records must be readable by a human and by an AI, and you should not have to convert anything by hand.**
 
-Click **导出 / Export** — in the sidebar header or on the settings page — then pick a format and a scope.
+Open **设置 → 待办清单** (Settings → Todo Checklist), expand **导出全部记录**, then pick a format and a scope.
 
 **Formats** (`给人看` = for humans, `给 AI 看` = for AI):
 

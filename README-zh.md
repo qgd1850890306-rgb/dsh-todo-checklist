@@ -50,9 +50,9 @@
 </tr>
 </table>
 
-**导出：8 条记录进去，一个自包含文件出来 —— 按「谁读」选格式**
+**导出：设置页里的折叠区 —— 8 条记录进去，一个自包含文件出来，按「谁读」选格式**
 
-![导出对话框](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/export.png)
+![导出区](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/export.png)
 
 **设置页：模型、提醒渠道、侧栏开关，以及带四个分组的完整记录列表**
 
@@ -95,7 +95,7 @@
 
 1.5.0 新增导出。设计目标很朴素：**同一批记录，人要能读，AI 也要能读，而且不该需要你手动转换。**
 
-点**导出**（侧栏头部或设置页都有），选格式和范围即可。
+进 **设置 → 待办清单**，展开「导出全部记录」，选格式和范围即可。
 
 **五种格式**：
 
