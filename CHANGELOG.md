@@ -3,6 +3,18 @@
 本插件遵循语义化版本：`主版本.次版本.修订号`。
 早期版本（0.x）为内部迭代，自 `1.0.0` 起面向使用者记录。
 
+## 1.5.2 — 2026-10-19
+
+修正 `todo_list` 对「已放弃」记录的标记：此前把它渲染成未勾选的 `[ ]`，模型转述时会当成「还没做」。
+
+### 修复
+- **已放弃不再冒充未完成**：`todo_list` 现在用三种记号区分状态 —— `[ ]` 未完成、`[x]` 已完成、`[-]` 已放弃，并在已放弃条目后附「放弃原因」。此前三种状态只有完成/未完成两种记号，已放弃的记录看起来和待办一模一样，头部「未完成 N」与正文的 `[ ]` 条数也因此对不上（真机实测：头部说未完成 6，正文却有 7 个 `[ ]`）。
+- **头部计数补上已放弃**：只在确实存在已放弃记录时才追加「/ 已放弃 N」，没有该类记录时头部保持原样。
+
+### English
+- **Abandoned records no longer masquerade as pending**: `todo_list` now renders three distinct marks — `[ ]` pending, `[x]` completed, `[-]` abandoned — and appends the abandon reason. Previously an abandoned record was indistinguishable from a pending one, so the header count ("6 pending") contradicted the body (7 unchecked boxes).
+- **The header count now includes abandoned records**, appended as "/ N abandoned" only when such records exist.
+
 ## 1.5.1 — 2026-10-19
 
 修复一个会让待办列表**整体读不出来**的存储生命周期缺陷（升级后建议重启一次 DSH）。

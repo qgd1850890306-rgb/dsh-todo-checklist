@@ -1339,16 +1339,26 @@ const PROMPT_SECTION = [
   '- 纯问答、闲聊、以及当前回合内即可完成的小请求不要写入待办；同一事项不要重复写入。',
 ].join('\n')
 
+// [ ] 未完成 / [x] 已完成 / [-] 已放弃：三种状态必须各用各的记号，否则已放弃的条目
+// 会被读成「未完成」，头部计数与正文勾选数对不上，模型转述时就会自相矛盾。
+const TODO_MARK = { completed: 'x', abandoned: '-', pending: ' ' }
+
 function formatTodoList(items) {
   if (items.length === 0) return '待办列表为空。'
-  const { pendingCount, completedCount } = summarize(items)
+  const { pendingCount, completedCount, abandonedCount } = summarize(items)
   const lines = items.map((item, index) => {
-    const mark = item.status === 'completed' ? 'x' : ' '
+    const mark = TODO_MARK[item.status] ?? ' '
+    const reason = item.status === 'abandoned' && item.abandonReason !== undefined
+      ? `（放弃原因：${item.abandonReason}）`
+      : ''
     const source = item.source === undefined ? '' : `（来源：${SOURCE_LABEL[item.source] ?? item.source}）`
     const due = item.dueAt === undefined ? '' : `（提醒：${item.dueAt}）`
-    return `${index + 1}. [${mark}] ${item.title}${due}${source}`
+    return `${index + 1}. [${mark}] ${item.title}${reason}${due}${source}`
   })
-  return [`待办列表（未完成 ${pendingCount} / 已完结 ${completedCount}）：`, ...lines].join('\n')
+  const head = abandonedCount === 0
+    ? `待办列表（未完成 ${pendingCount} / 已完结 ${completedCount}）：`
+    : `待办列表（未完成 ${pendingCount} / 已完结 ${completedCount} / 已放弃 ${abandonedCount}）：`
+  return [head, ...lines].join('\n')
 }
 
 /** 注册宿主插件：todos 服务、模型工具、提示词片段、提醒引擎与 AI 捕获监听。 */

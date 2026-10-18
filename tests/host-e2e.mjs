@@ -124,6 +124,21 @@ const afterClear = (await svc.list({})).value.items
 check('A19 clearCompleted 只清已完结', cleared.ok === true && afterClear.length === 1 && afterClear[0].title === '留下的未完成')
 await svc.deleteTodo({ id: addA.value.id })
 
+// 三种状态各用各的记号：已放弃若显示成 [ ]，模型转述时会把「不做了」当成「还没做」，
+// 头部计数与正文勾选数也会对不上（v1.5.1 真机实测踩到）。
+const mkPending = await svc.add({ title: '还在做', source: 'manual' })
+const mkAbandon = await svc.add({ title: '决定不做了', source: 'manual' })
+await svc.abandon({ id: mkAbandon.value.id, reason: '需求取消' })
+const listText = await a.tools[1].execute({}, {})
+check('A20 todo_list 用 [-] 标记已放弃、[ ] 留给未完成',
+  listText.includes('[-] 决定不做了') && listText.includes('[ ] 还在做'),
+  listText.split('\n').slice(0, 3).join(' | '))
+check('A20b 头部计数含已放弃，与正文勾选数一致',
+  listText.includes('未完成 1') && listText.includes('已放弃 1') && listText.includes('放弃原因：需求取消'),
+  listText.split('\n')[0])
+await svc.deleteTodo({ id: mkPending.value.id })
+await svc.deleteTodo({ id: mkAbandon.value.id })
+
 // ---------- B. 精简环境（无 agents / llm / dshIm） ----------
 const cap = await svc.aiCapture({ text: '明天给供应商发 DFMEA 模板' })
 check('B1 无 agents 时 aiCapture 返回友好错误', cap.ok === false && /agents/.test(String(cap.error)), String(cap.error))

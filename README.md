@@ -259,7 +259,7 @@ dsh-todo-checklist/
 
 ## 📝 Changelog · 更新日志
 
-See [CHANGELOG.md](./CHANGELOG.md). Recent: **1.5.1** fixes the todo list becoming unreadable after a plugin reload (storage domain `already-open`); **1.5.0** adds export (HTML / Markdown / Excel / CSV / JSON) plus the `todo_export` tool.
+See [CHANGELOG.md](./CHANGELOG.md). Recent: **1.5.2** stops abandoned records from showing up as unchecked pending items in `todo_list`; **1.5.1** fixes the todo list becoming unreadable after a plugin reload (storage domain `already-open`); **1.5.0** adds export (HTML / Markdown / Excel / CSV / JSON) plus the `todo_export` tool.
 
 ---
 
