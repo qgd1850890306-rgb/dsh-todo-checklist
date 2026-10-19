@@ -141,7 +141,7 @@ todo_export({ format: "md" | "csv" | "json" | "html", scope: "all" | "pending" |
 dsh plugin --profile desktop add dsh-todo-checklist
 ```
 
-包已发布在公共 npm（`https://www.npmjs.com/package/dsh-todo-checklist`），当前版本 `1.5.4`。想钉住版本可以写 `dsh-todo-checklist@1.5.4`。
+包已发布在公共 npm（`https://www.npmjs.com/package/dsh-todo-checklist`），当前版本 `1.5.5`。想钉住版本可以写 `dsh-todo-checklist@1.5.5`。
 
 **方式二 —— 从 GitHub 装**
 
