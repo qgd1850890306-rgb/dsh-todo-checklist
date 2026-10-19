@@ -5,6 +5,10 @@
 
 ## 1.5.4 — 2026-10-19
 
+### 发布
+
+- **首次发布到 npm**：`npm install dsh-todo-checklist` 可用，版本 `1.5.4`。此前只能从 GitHub 或本地 tarball 安装，这是社区目录 `awesome-dsh-plugin` 一直显示 `npm: null`、官方 Discover 里搜不到的原因（它对外提供的 format 1 索引只收 npm 源条目）。发布后由目录的探针按天回填，随后进入官方索引。
+
 ### 改进
 
 - **导出范围支持多选**：未完成 / 逾期 / 已完成 / 已放弃 可以任意勾选若干个，取并集。此前是单选，选「未完成」就选不了「逾期」。现在一条都不选就是全部记录，所以去掉了「全部记录 / 仅未完成」这类单选项。
@@ -17,6 +21,7 @@
 
 ### English
 
+- **First npm release**: `npm install dsh-todo-checklist` works, version `1.5.4`. Until now the plugin shipped through GitHub and local tarballs only, which is why the community catalog listed it with `npm: null` and it never appeared in the official Discover index — that index only carries npm-sourced entries. The catalog's probe backfills daily, so it should show up there within about a day.
 - **Multi-select export scope**: pick any combination of pending / overdue / completed / abandoned; the export unions them. Previously it was single-select, so choosing "pending" made "overdue" unavailable. Selecting nothing means all records, so the "all records / pending only" radio options are gone.
 - The export filename and the summary line now carry the actual scope, e.g. `dsh-todo-20261019-0140-pending-overdue.md` and `Exporting 6 records (Pending + Overdue) → HTML`. The `todo_export` tool's `scope` parameter accepts an array as well.
 - **Dropped the "for humans / for AI" caption on each format card**: the format name and its one-line description already say what it is; that extra line was redundant. The hint now sits directly under the format name.
