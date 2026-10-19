@@ -154,6 +154,17 @@ dsh plugin --profile desktop add <absolute path to directory or .tgz>
 
 **Via the UI**: **Plugins** → **Add plugin** → paste the GitHub URL above (the same string as Option 1).
 
+**Via the official Discover page**: the repository root carries an `index.json` written as a DSH **format 1 plugin market index** (`source.type = git`, pinned to the release commit). Add it as an index source:
+
+1. **Settings** → **Plugins** → **Discover** → **Add index source**
+2. Paste this address (a CDN mirror with CORS, reachable here):
+
+```
+https://cdn.jsdelivr.net/gh/qgd1850890306-rgb/dsh-todo-checklist@main/index.json
+```
+
+> Why it does not turn up in the community catalog: `awesome-dsh-plugin` publishes a catalog in a different format, and the format 1 index it exposes **only lists entries that are published to npm** — all 3036 entries today are npm-sourced, zero are git-sourced. This plugin ships through GitHub only, so that rule skips it. The self-hosted index above is the supported way around it; once the package is on npm this index will switch to `type: npm`.
+
 **Upgrade** — re-add from the same GitHub URL; the newest `main` is fetched:
 
 ```bash

@@ -154,6 +154,17 @@ dsh plugin --profile desktop add <本地目录或 .tgz 的绝对路径>
 
 **在界面上装**：**插件** → **添加插件** → 粘贴上面那条 GitHub URL（和方式一同一串）。
 
+**在官方「发现」页里装**：本仓库根目录带了一份 `index.json`，是按 DSH 官方的 **format 1 插件市场索引**写的（`source.type = git`，钉在发版的 commit 上）。把它加成索引源即可：
+
+1. **设置** → **插件** → **发现** → **添加索引源**
+2. 填这个地址（镜像，带 CORS，本机可达）：
+
+```
+https://cdn.jsdelivr.net/gh/qgd1850890306-rgb/dsh-todo-checklist@main/index.json
+```
+
+> 为什么官方的社区目录里搜不到：`awesome-dsh-plugin` 那份目录是另一套格式，而它对外提供的 format 1 索引（`index.json`）**只收已发布到 npm 的条目** —— 当前 3036 条全部是 npm 源，git 源 0 条。本插件只在 GitHub 分发，所以被那条规则跳过。上面的自建索引源是绕开这一步的正规做法；等发布到 npm 后这个索引会改成 npm 源。
+
 **升级** —— 用同一个 GitHub URL 再装一次，会拉最新的 `main`：
 
 ```bash
