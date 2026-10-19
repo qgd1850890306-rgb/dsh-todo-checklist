@@ -141,7 +141,7 @@ Ask the model to "export all my todos as Markdown" and it returns the text direc
 dsh plugin --profile desktop add dsh-todo-checklist
 ```
 
-It is published on the public npm registry (`https://www.npmjs.com/package/dsh-todo-checklist`); current version `1.5.4`. Pin it with `dsh-todo-checklist@1.5.4` if you want.
+It is published on the public npm registry (`https://www.npmjs.com/package/dsh-todo-checklist`); current version `1.5.5`. Pin it with `dsh-todo-checklist@1.5.5` if you want.
 
 **Option 2 — GitHub**
 
