@@ -141,7 +141,7 @@ todo_export({ format: "md" | "csv" | "json" | "html", scope: "all" | "pending" |
 dsh plugin --profile desktop add dsh-todo-checklist
 ```
 
-包已发布在公共 npm（`https://www.npmjs.com/package/dsh-todo-checklist`），当前版本 `1.5.5`。想钉住版本可以写 `dsh-todo-checklist@1.5.5`。
+包已发布在公共 npm（`https://www.npmjs.com/package/dsh-todo-checklist`）。不写版本号就是最新版；要钉住某一版，写成 `dsh-todo-checklist@<版本号>`。
 
 **方式二 —— 从 GitHub 装**
 
@@ -275,7 +275,7 @@ dsh-todo-checklist/
 
 ## 📝 Changelog · 更新日志
 
-见 [CHANGELOG.md](./CHANGELOG.md)。近期：**1.5.5** 修正 1.5.4 包内那份「这个包没有发布到 npm」的自相矛盾说明；**1.5.4** 导出范围改为多选（未完成 / 逾期 / 已完成 / 已放弃，取并集），并去掉多余的「给人看 / 给 AI 看」标注；**1.5.3** 把导出从侧栏移到设置页的可折叠区；**1.5.2** 修正 `todo_list` 把已放弃记录渲染成未勾选项的问题；**1.5.1** 修复插件重载后待办不可读（存储域 already-open）；**1.5.0** 新增导出（HTML / Markdown / Excel / CSV / JSON）与 `todo_export` 工具。
+见 [CHANGELOG.md](./CHANGELOG.md)。近期：**1.5.6** 安装说明不再写死版本号，以后发版不会再出现包内版本与实际版本不一致；**1.5.5** 修正 1.5.4 包内那份「这个包没有发布到 npm」的自相矛盾说明；**1.5.4** 导出范围改为多选（未完成 / 逾期 / 已完成 / 已放弃，取并集），并去掉多余的「给人看 / 给 AI 看」标注；**1.5.3** 把导出从侧栏移到设置页的可折叠区；**1.5.2** 修正 `todo_list` 把已放弃记录渲染成未勾选项的问题；**1.5.1** 修复插件重载后待办不可读（存储域 already-open）；**1.5.0** 新增导出（HTML / Markdown / Excel / CSV / JSON）与 `todo_export` 工具。
 
 ---
 

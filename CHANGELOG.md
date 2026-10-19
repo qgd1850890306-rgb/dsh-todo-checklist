@@ -3,6 +3,15 @@
 本插件遵循语义化版本：`主版本.次版本.修订号`。
 早期版本（0.x）为内部迭代，自 `1.0.0` 起面向使用者记录。
 
+## 1.5.6 — 2026-10-19
+
+### 修复
+
+- **安装说明不再写死版本号**：1.5.5 的 README 写着「当前版本 `1.5.5`」，但每次发版这句话就过期一次 —— 1.5.5 自己发布时包里带的还是「当前版本 1.5.4」。现在改成不写死版本：不写版本号就是最新版，要钉版就写 `dsh-todo-checklist@<版本号>`，以后发版不会再产生这种前后不一致。
+
+### English
+
+- **The install note no longer hard-codes a version number**: the 1.5.5 README said "current version `1.5.5`", which goes stale on every release — 1.5.5 itself shipped a tarball still claiming "current version 1.5.4". It now omits the version (latest by default) and shows `dsh-todo-checklist@<version>` for pinning, so this inconsistency cannot recur.
 ## 1.5.5 — 2026-10-19
 
 ### 修复

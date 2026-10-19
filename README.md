@@ -141,7 +141,7 @@ Ask the model to "export all my todos as Markdown" and it returns the text direc
 dsh plugin --profile desktop add dsh-todo-checklist
 ```
 
-It is published on the public npm registry (`https://www.npmjs.com/package/dsh-todo-checklist`); current version `1.5.5`. Pin it with `dsh-todo-checklist@1.5.5` if you want.
+It is published on the public npm registry (`https://www.npmjs.com/package/dsh-todo-checklist`). Omit the version to get the latest; pin one with `dsh-todo-checklist@<version>`.
 
 **Option 2 — GitHub**
 
@@ -275,7 +275,7 @@ dsh-todo-checklist/
 
 ## 📝 Changelog · 更新日志
 
-See [CHANGELOG.md](./CHANGELOG.md). Recent: **1.5.5** fixes the self-contradicting "not on npm yet" install note that shipped inside the 1.5.4 tarball; **1.5.4** lets you pick several export scopes at once (pending / overdue / completed / abandoned, unioned) and drops the redundant "for humans / for AI" caption; **1.5.3** moves export out of the sidebar into a collapsible section on the settings page; **1.5.2** stops abandoned records from showing up as unchecked pending items in `todo_list`; **1.5.1** fixes the todo list becoming unreadable after a plugin reload (storage domain `already-open`); **1.5.0** adds export (HTML / Markdown / Excel / CSV / JSON) plus the `todo_export` tool.
+See [CHANGELOG.md](./CHANGELOG.md). Recent: **1.5.6** stops the install note from hard-coding a version number, so a release can no longer ship a README that names a different version; **1.5.5** fixes the self-contradicting "not on npm yet" install note that shipped inside the 1.5.4 tarball; **1.5.4** lets you pick several export scopes at once (pending / overdue / completed / abandoned, unioned) and drops the redundant "for humans / for AI" caption; **1.5.3** moves export out of the sidebar into a collapsible section on the settings page; **1.5.2** stops abandoned records from showing up as unchecked pending items in `todo_list`; **1.5.1** fixes the todo list becoming unreadable after a plugin reload (storage domain `already-open`); **1.5.0** adds export (HTML / Markdown / Excel / CSV / JSON) plus the `todo_export` tool.
 
 ---
 
