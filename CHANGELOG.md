@@ -3,6 +3,16 @@
 本插件遵循语义化版本：`主版本.次版本.修订号`。
 早期版本（0.x）为内部迭代，自 `1.0.0` 起面向使用者记录。
 
+## 1.5.5 — 2026-10-19
+
+### 修复
+
+- **修正 1.5.4 包内 README 的自相矛盾**：1.5.4 发布到 npm 时，包内还带着「这个包没有发布到 npm」的旧安装说明，而它自己就在 npm 上。本版把安装说明改为以 npm 装法为主，GitHub 与本地 tarball 作为备选。
+
+### English
+
+- **Fixed a self-contradicting README inside the 1.5.4 tarball**: that release shipped with the old "not on npm yet" install note while itself being on npm. The install section now leads with the npm route and keeps GitHub and local tarball as fallbacks.
+
 ## 1.5.4 — 2026-10-19
 
 ### 发布
