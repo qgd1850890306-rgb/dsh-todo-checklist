@@ -26,7 +26,7 @@ const esc = (s) => s.split('').map(U).join('');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
 check('package name', pkg.name === NAME, pkg.name);
-check('version', pkg.version === '1.5.6', pkg.version);
+check('version', pkg.version === '1.5.9', pkg.version);
 check('files 含 lib 目录项', pkg.files.includes('lib'), JSON.stringify(pkg.files));
 check('files 含 locale 与 icon', pkg.files.includes('icon.svg') && pkg.files.some((f) => f.startsWith('locale/')));
 check('exports 含 ./icon 与 locale', !!pkg.exports['./icon'] && Object.keys(pkg.exports).some((k) => k.includes('locale')));
@@ -43,7 +43,7 @@ check('client 无旧 id 注册', !client.includes('id: "dsh-todo"'));
 check('client 无 U+FFFD', !client.includes('\uFFFD'));
 check('client 含侧栏槽位', client.includes('sidebar.footer.action'));
 check('client 含设置槽位', client.includes('settings.section'));
-check('client 含 v1.5.5 徽标', (client.split('v1.5.6').length - 1) === 2, `n=${client.split('v1.5.6').length - 1}`);
+check('client 含 v1.5.8 徽标', (client.split('v1.5.9').length - 1) === 2, `n=${client.split('v1.5.9').length - 1}`);
 check('client 含导出对话框', client.includes(esc('导出待办记录')));
 check('client 含导出下载锚点', client.includes('createObjectURL'));
 check('client 含 待办清单设置', client.includes(esc('待办清单设置')));

@@ -206,11 +206,22 @@ function captureSelectionLocator(selection) {
     while (el && depth < 12) {
       // 消息容器常见标识：role=article，或属性名�?message/msg �?data-*
       if (!messageId) {
-        for (const attr of Array.from(el.attributes ?? [])) {
-          const n = attr.name.toLowerCase()
-          if ((n === 'data-message-id' || n === 'data-msg-id' || n === 'data-message-key'
-            || (n.startsWith('data-') && n.includes('message'))) && attr.value) {
-            messageId = attr.value
+        // v1.5.7 修复①：DSH 会话 DOM 里没有 data-message-id / data-msg-id / data-message-key
+        // （实测 dsh-client-ui-chat.js 里三者出现次数均为 0），真实标识是
+        // data-chat-node-key / data-chat-anchor-key / data-chat-flow-key。
+        // 此前只认旧属性名 → messageId 永远为空 → 只能退回文本匹配，
+        // 而文本匹配又受下面 ② 的窗口化分页限制，于是「能跳转但不高亮」。
+        const ds = el.dataset ?? {}
+        if (ds.chatNodeKey) messageId = ds.chatNodeKey
+        else if (ds.chatAnchorKey) messageId = ds.chatAnchorKey
+        else if (ds.chatFlowKey) messageId = ds.chatFlowKey
+        // 兼容旧宿主的属性名（其它版本可能仍带）
+        if (!messageId) {
+          for (const attr of Array.from(el.attributes ?? [])) {
+            const n = attr.name.toLowerCase()
+            if ((n === 'data-message-id' || n === 'data-msg-id' || n === 'data-message-key') && attr.value) {
+              messageId = attr.value
+            }
           }
         }
       }
@@ -244,34 +255,55 @@ function revealLocator(locator) {
   let target
   // �?�?messageId 属性找
   if (locator.messageId) {
+    // v1.5.7 修复：DSH 会话节点真实的键属性是 data-chat-node-key / data-chat-anchor-key /
+    // data-chat-flow-key；data-message-id / data-msg-id / data-message-key 在该 DOM 里
+    // 一个都不存在（已在 dsh-client-ui-chat.js 里统计为 0 次），所以早期记录的
+    // messageId 也永远定位不到，只能退回文本匹配。
+    const mid = locator.messageId
     target = document.querySelector(
-      `[data-message-id="${locator.messageId}"],[data-msg-id="${locator.messageId}"],[data-message-key="${locator.messageId}"]`
+      `[data-chat-node-key="${mid}"],[data-chat-anchor-key="${mid}"],[data-chat-flow-key="${mid}"]`
     )
+    if (!target) {
+      target = document.querySelector(
+        `[data-message-id="${mid}"],[data-msg-id="${mid}"],[data-message-key="${mid}"]`
+      )
+    }
   }
-  // ② 按文本锚点遍历文本节点
+  // ② 按文本锚点找
   if (!target && locator.anchorText) {
-    // v1.2.9 发布加固：优先限定在会话主区域（原先整页 body 遍历；长会话下每 400ms 全文档扫描）。
+    // v1.5.9 修复③：先按消息容器整块比对。
+    // 旧实现用 TreeWalker 逐「文本节点」判 includes，而 markdown 会把一段话拆进
+    // <strong>/<code>/<a> 等内联元素，锚点一旦跨元素就永远匹配不上。
+    // 这里改为：遍历会话里的消息容器（[data-chat-node-key] 等），拿整块 textContent 比对。
     const scope = document.querySelector('[data-conversation-scroll], [data-session-messages], main[role="main"], main') ?? document.body
-    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
-      acceptNode: (node) => {
-        const p = node.parentElement
-        if (!p) return NodeFilter.FILTER_REJECT
-        if (p.closest('[data-dsh-todo],script,style')) return NodeFilter.FILTER_REJECT
-        return normalizeForMatch(node.textContent).includes(locator.anchorText)
-          ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
-      },
-    })
-    const found = walker.nextNode()
-    if (found) {
-      // 上溯到最近的块级消息元素
-      let el = found.parentElement
-      for (let i = 0; i < 6 && el; i++) {
-        const display = window.getComputedStyle(el).display
-        if (display.startsWith('block') || display === 'flex' || el.getAttribute('role') === 'article') { target = el; break }
-        el = el.parentElement
+    const blocks = scope.querySelectorAll('[data-chat-node-key], [data-chat-anchor-key]')
+    for (const block of blocks) {
+      if (block.closest('[data-dsh-todo]')) continue
+      if (normalizeForMatch(block.textContent).includes(locator.anchorText)) { target = block; break }
+    }
+    // 宿主没有容器属性时的兜底：仍按文本节点逐段找（老版本 DOM）
+    if (!target) {
+      const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
+        acceptNode: (node) => {
+          const p = node.parentElement
+          if (!p) return NodeFilter.FILTER_REJECT
+          if (p.closest('[data-dsh-todo],script,style')) return NodeFilter.FILTER_REJECT
+          return normalizeForMatch(node.textContent).includes(locator.anchorText)
+            ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+        },
+      })
+      const found = walker.nextNode()
+      if (found) {
+        // 上溯到最近的块级消息元素
+        let el = found.parentElement
+        for (let i = 0; i < 6 && el; i++) {
+          const display = window.getComputedStyle(el).display
+          if (display.startsWith('block') || display === 'flex' || el.getAttribute('role') === 'article') { target = el; break }
+          el = el.parentElement
+        }
+        // v1.1.3 修复①：兜底直接高亮文本节点父元素（以前命中也不明显）
+        target = target ?? found.parentElement
       }
-      // v1.1.3 修复①：兜底直接高亮文本节点父元素（以前命中也不明显）
-      target = target ?? found.parentElement
     }
   }
   if (target) {
@@ -290,15 +322,95 @@ function revealLocator(locator) {
  *  v1.2.9 发布加固：可取消——同一时刻只保留最近一次跳转的轮询（旧轮询下一次循环即退出），
  *  标签页隐藏期间不空转（看不到高亮，且全文档扫描无意义）。 */
 let revealToken = 0
-async function waitAndReveal(locator, { timeoutMs = 12_000, intervalMs = 400 } = {}) {
-  const token = ++revealToken
+/** v1.5.9 修复：轮询从「自己发号」改成「由调用方持号」。
+ *  旧写法里 waitAndRevealWithPaging 先 `const token = ++revealToken`，再调用本函数，
+ *  而本函数内部又 `++revealToken`——外层拿到的 token 立刻过期，返回后
+ *  `if (token !== revealToken) return false` 恒为真，翻页循环成了死代码。
+ *  现在只让最外层跳转分配一次 generation，内层轮询只读不写。 */
+async function pollReveal(locator, { timeoutMs, intervalMs = 400, generation }) {
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
-    if (token !== revealToken) return false
+    if (generation !== revealToken) return false
     if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
       if (revealLocator(locator)) return true
     }
     await new Promise((r) => window.setTimeout(r, intervalMs))
+  }
+  return false
+}
+
+async function waitAndReveal(locator, { timeoutMs = 12_000, intervalMs = 400 } = {}) {
+  const generation = ++revealToken
+  return pollReveal(locator, { timeoutMs, intervalMs, generation })
+}
+
+/** v1.5.7 修复③：会话历史是窗口化分页的（只加载尾部一页），早期消息根本不在 DOM 里，
+ *  所以纯轮询永远等不到目标节点——这正是「能跳转但不高亮」的主因。
+ *  这里在轮询之外主动向前翻页：优先用宿主 API（sessions.binding(id).binding.session
+ *  的 loadOlder()，每次至少补 50 条 / 两个 Turn），拿不到就退回 DOM 办法（把会话滚动
+ *  容器推到底部，原生滚动会触发 loadOlder）。命中的判定与 waitAndReveal 一致。 */
+async function waitAndRevealWithPaging(sessionId, locator, {
+  maxPages = 60,
+  perPageWaitMs = 900,
+  ctx,
+} = {}) {
+  // v1.5.9 修复：generation 只在这里发一次，内层轮询只读。
+  // 旧代码先用 ++revealToken 拿号，再调 waitAndReveal（它内部也 ++revealToken），
+  // 导致 `if (token !== revealToken) return false` 恒真——翻页循环从未执行过。
+  const generation = ++revealToken
+  // 先按老节奏等一轮，覆盖最常见的「消息就在尾部窗口里」的情况
+  if (await pollReveal(locator, { timeoutMs: 3_000, generation })) return true
+  if (generation !== revealToken) return false
+
+  // 取宿主侧的分页句柄（拿不到就返回 undefined，后续走 DOM 兜底）
+  const pager = (() => {
+    try {
+      const ss = ctx?.get?.('sessions')
+      const bd = ss?.binding?.(sessionId)
+      const sess = bd?.session
+      if (sess && typeof sess.loadOlder === 'function') return sess
+    } catch (error) {
+      console.warn('[dsh-todo] sessions.binding 取分页句柄失败:', error)
+    }
+    return undefined
+  })()
+
+  const scroller = () =>
+    document.querySelector('[data-conversation-scroll]') ??
+    document.querySelector('[data-session-messages]') ??
+    null
+
+  let page = 0
+  let stagnant = 0
+  while (page < maxPages) {
+    if (generation !== revealToken) return false
+    page += 1
+    if (pager) {
+      if (pager.hasMore === false) break
+      try {
+        await pager.loadOlder()
+      } catch (error) {
+        console.warn('[dsh-todo] loadOlder 失败，改用滚动兜底:', error)
+        break
+      }
+    } else {
+      const el = scroller()
+      if (!el) break
+      const before = el.querySelectorAll('[data-chat-node-key]').length
+      el.scrollTop = 0
+      await new Promise((r) => window.setTimeout(r, 250))
+      const after = el.querySelectorAll('[data-chat-node-key]').length
+      if (after <= before) stagnant += 1
+      else stagnant = 0
+      // 连续两页没长出新节点 = 翻到顶了
+      if (stagnant >= 2) break
+    }
+    await new Promise((r) => window.setTimeout(r, 260))
+    if (revealLocator(locator)) {
+      console.log(`[dsh-todo] 向前翻 ${page} 页后命中目标`)
+      return true
+    }
+    await new Promise((r) => window.setTimeout(r, perPageWaitMs - 260 > 0 ? perPageWaitMs - 260 : 0))
   }
   return false
 }
@@ -1509,20 +1621,27 @@ function GlobalReminderPopup({ todosApi, openSession }) {
  * - 范围只影响「导出哪些条目」，格式只影响「导出成什么文件」，两者独立；
  * - 范围可多选（v1.5.4）：未完成 / 逾期 / 已完成 / 已放弃 任选若干个，取并集；
  *   一条都不选 = 全部记录，所以不再有「全部记录」这个按钮——它等于什么都不选；
+ * - 格式也可多选（v1.5.8）：勾几个就下载几个文件，一次要把 HTML 和 Excel 各存一份不用点两轮；
+ *   取消到只剩一个时回落到 HTML，不出现「一个格式都没选」的死状态；
  * - 格式卡片只写一句说明，不再标「给人看 / 给 AI 看」，那行字是重复信息（用户明确说多余）；
  * - 默认 HTML + 不选范围（= 全部记录）；
  * - v1.5.3：新增 inline 模式——设置页的折叠区直接复用这份表单，不弹遮罩。
  *   侧栏头部的导出按钮已移除（用户要求「这个页面要简洁」）。
  */
 function ExportDialog({ items, onClose, showToast, inline = false }) {
-  const [format, setFormat] = useState('html')
+  // v1.5.8：格式也改成多选（用户要求「可以多选导出格式」）。
+  // 空数组按 HTML 兜底，保证任何时刻都有一个可导出的格式，不会出现「点了导出什么都不发生」。
+  const [formats, setFormats] = useState(['html'])
   // 多选：空数组 = 全部记录
   const [scopes, setScopes] = useState([])
   const [busy, setBusy] = useState(false)
 
   const all = Array.isArray(items) ? items : []
   const stats = summarizeExport(all)
-  const formatItem = EXPORT_FORMATS.find((f) => f.id === format) ?? EXPORT_FORMATS[0]
+  const activeFormats = EXPORT_FORMATS.filter((f) => formats.includes(f.id))
+  const formatLabel = activeFormats.length === 0
+    ? EXPORT_FORMATS[0].label
+    : activeFormats.map((f) => f.label).join(' + ')
   const scopeLabel = scopes.length === 0
     ? '全部记录'
     : EXPORT_SCOPES.filter((s) => scopes.includes(s.id)).map((s) => s.label).join(' + ')
@@ -1541,6 +1660,19 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
     setScopes((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
+  // v1.5.8：格式多选。至少保留一个——取消最后一个时回落到 HTML，避免「一个都不选」的空状态。
+  const toggleFormat = (id) => {
+    setFormats((prev) => {
+      if (prev.includes(id)) {
+        const next = prev.filter((x) => x !== id)
+        return next.length === 0 ? ['html'] : next
+      }
+      // 按 EXPORT_FORMATS 的声明顺序排列，保证导出顺序稳定（不按点击先后）
+      const next = new Set([...prev, id])
+      return EXPORT_FORMATS.filter((f) => next.has(f.id)).map((f) => f.id)
+    })
+  }
+
   const run = useCallback(() => {
     if (busy) return
     if (previewCount === 0) {
@@ -1549,13 +1681,20 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
     }
     setBusy(true)
     try {
-      const result = buildExportFile(all, {
-        format,
-        scopes,
-        appVersion: '1.5.6',
-      })
-      const filename = downloadExportFile(result)
-      showToast(`已导出 ${result.count} 条记录：${filename}`)
+      // v1.5.8：一次导出多个格式，每个格式各下载一个文件。
+      const targets = activeFormats.length === 0 ? [EXPORT_FORMATS[0]] : activeFormats
+      const done = []
+      for (const target of targets) {
+        const result = buildExportFile(all, {
+          format: target.id,
+          scopes,
+          appVersion: '1.5.9',
+        })
+        done.push(downloadExportFile(result))
+      }
+      showToast(done.length === 1
+        ? `已导出 ${previewCount} 条记录：${done[0]}`
+        : `已导出 ${previewCount} 条记录，共 ${done.length} 个文件：${done.join('、')}`)
       if (typeof onClose === 'function') onClose()
     } catch (error) {
       console.warn('[dsh-todo] export failed:', error)
@@ -1563,7 +1702,7 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
     } finally {
       setBusy(false)
     }
-  }, [busy, previewCount, all, format, scopes, showToast, onClose])
+  }, [busy, previewCount, all, activeFormats, scopes, showToast, onClose])
 
   const cardStyle = (active) => ({
     display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start',
@@ -1592,22 +1731,28 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
     h('p', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', margin: inline ? '0 0 14px' : '0 0 16px' } },
       `共 ${stats.total} 条记录（未完成 ${stats.pending} / 已完成 ${stats.completed} / 已放弃 ${stats.abandoned}）。导出内容只包含这份清单，不含对话原文。`),
 
-    h('div', { style: { fontSize: 12, fontWeight: 600, marginBottom: 6 } }, '导出成什么'),
+    h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 } },
+      h('span', { style: { fontSize: 12, fontWeight: 600 } }, '导出成什么'),
+      h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' } }, '可多选，每个格式各下载一个文件'),
+    ),
     h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 } },
-      EXPORT_FORMATS.map((option) => h('label', {
-        key: option.id, style: cardStyle(format === option.id),
-      },
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
-          h('input', {
-            type: 'radio', name: 'dsh-todo-export-format', value: option.id,
-            checked: format === option.id,
-            onChange: () => setFormat(option.id),
-            style: { margin: 0, accentColor: 'var(--dsw-alias-brand-primary, #f59e0b)' },
-          }),
-          h('span', { style: { fontSize: 13, fontWeight: 600 } }, option.label),
-        ),
-        h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', paddingLeft: 20, lineHeight: 1.45 } }, option.hint),
-      )),
+      EXPORT_FORMATS.map((option) => {
+        const active = formats.includes(option.id)
+        return h('label', {
+          key: option.id, style: cardStyle(active),
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+            h('input', {
+              type: 'checkbox', name: 'dsh-todo-export-format', value: option.id,
+              checked: active,
+              onChange: () => toggleFormat(option.id),
+              style: { margin: 0, accentColor: 'var(--dsw-alias-brand-primary, #f59e0b)' },
+            }),
+            h('span', { style: { fontSize: 13, fontWeight: 600 } }, option.label),
+          ),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', paddingLeft: 20, lineHeight: 1.45 } }, option.hint),
+        )
+      }),
     ),
 
     h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 } },
@@ -1647,7 +1792,7 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
       },
     },
       h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } },
-        `将导出 ${previewCount} 条（${scopeLabel}）→ ${formatItem.label}`),
+        `将导出 ${previewCount} 条（${scopeLabel}）→ ${formatLabel}`),
       inline ? null : h('button', {
         type: 'button', onClick: onClose,
         style: {
@@ -2008,7 +2153,7 @@ h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'spac
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', { style: { fontSize: 16 } }, '📋'),
           h('span', { style: { fontSize: 15, fontWeight: 600 } }, '待办清单设置'),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.6'),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.9'),
         ),
         h('button', { type: 'button', onClick: onClose, style: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--dsh-alias-label-secondary)', padding: '4px 8px' } }, '×'),
       ),
@@ -2283,6 +2428,16 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
     } catch (e) { console.warn('[dsh-todo] save aiDefaultReminder failed:', e) }
   }, [todosApi, showToast])
 
+  // v1.5.8：侧栏开关移进独立的「界面」分组后，离保存按钮很远。
+  // 改成选中即保存，避免用户勾了却没点保存、以为已生效（旧版必须再点一次保存）。
+  const applySidebarChange = useCallback(async (next) => {
+    setSidebarEnabled(next)
+    try {
+      await todosApi.saveNotifyConfig({ sidebarEnabled: next })
+      showToast(next ? '已开启侧栏显示，重启 DSH 后生效' : '已关闭侧栏显示，重启 DSH 后生效')
+    } catch (e) { console.warn('[dsh-todo] save sidebarEnabled failed:', e) }
+  }, [todosApi, showToast])
+
   // 筛�
   const filtered = items.filter((item) => {
     // v1.1.2 未完成包含逾期（逾期本质也是未完成）；逾期 tab 为快捷子�
@@ -2364,22 +2519,45 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
     color: 'var(--dsw-alias-label-primary)', boxSizing: 'border-box',
   }
 
+  // v1.5.8 布局重构：按语义分四组，同类项就近，从上到下是「我怎么记 → 怎么提醒我 → 界面长什么样 → 数据怎么出去」。
+  // 每组统一用 sectionCard 出壳，标题 + 可选说明 + 内容，避免上次那种「同类项被拆到两个地方」。
+  // 注意：children 必须用 rest 参数收，不能写成 (title, desc, children, extraStyle)——
+  // 「提醒」组有多个子块，第二个会被当成 extraStyle 展开进 style，
+  // 而 React 元素的 $$typeof 是 Symbol，写进 style 会让整页崩在
+  // "Cannot convert a Symbol value to a string"（v1.5.8 发布前真机抓到）。
+  const sectionCard = (title, desc, ...children) => h('div', {
+    style: {
+      marginBottom: 12, padding: '12px 16px', borderRadius: 10,
+      background: 'var(--dsw-alias-bg-layer-2, #f8f8f8)',
+    },
+  },
+    h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: desc ? 4 : 10 } },
+      h('div', { style: { fontSize: 13, fontWeight: 600 } }, title),
+      desc ? h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' } }, desc) : null,
+    ),
+    ...children,
+  )
+
+  const fieldLabel = (text) => h('div', {
+    style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', marginBottom: 4 },
+  }, text)
+
   return h('div', { style: { padding: '0 24px 24px', color: 'var(--dsw-alias-label-primary)' } },
     // 头部（参考 dsh-archive-manager）
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '16px 0', borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)' } },
       h('h2', { style: { fontSize: 20, fontWeight: 600, margin: 0 } }, '待办清单'),
-      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.6'),
+      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.9'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 'auto' } }, 'GitHub'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/issues', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none' } }, '问题反馈'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/releases', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 8 } }, '检查更新'),
     ),
     h('p', { style: { fontSize: 13, color: 'var(--dsw-alias-label-secondary)', margin: '8px 0 16px' } }, '划词加待办清单 · AI 总结 · 定时提醒'),
-    // 设置区（折叠式）
-    h('div', { style: { marginBottom: 16, padding: '12px 16px', background: 'var(--dsw-alias-bg-layer-2, #f8f8f8)', borderRadius: 10 } },
-      h('div', { style: { display: 'flex', gap: 16, flexWrap: 'wrap' } },
-        // AI 模型
-        h('div', { style: { flex: 1, minWidth: 200 } },
-          h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', marginBottom: 4 } }, 'AI 记录模型'),
+
+    // ① 记录：AI 用什么模型帮我记
+    sectionCard('记录', 'AI 帮你把一句话变成一条待办',
+      h('div', { style: { display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' } },
+        h('div', { style: { flex: '1 1 220px', minWidth: 200 } },
+          fieldLabel('AI 记录模型'),
           h('select', { value: aiModel, onChange: (e) => { void applyModelChange(e.target.value) }, style: { ...selectStyle, width: '100%' } },
             h('option', { value: '' }, `跟随当前会话默认模型（${defaultModel.provider ? defaultModel.provider + '/' + defaultModel.model : '未设置'}）`),
             modelGroups.map((group) => h('optgroup', { key: group.id, label: group.name },
@@ -2387,10 +2565,17 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
             )),
           ),
         ),
-        // 提醒渠道
-        h('div', { style: { flex: 1, minWidth: 200 } },
-          h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', marginBottom: 4 } }, '提醒渠道'),
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 4 } },
+        h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', flex: '1 1 180px', paddingBottom: 4, lineHeight: 1.5 } },
+          '选完立即生效，不用再点保存。'),
+      ),
+    ),
+
+    // ② 提醒：怎么提醒我 + 提醒发到哪 + 没写时间时默认什么时候提醒
+    sectionCard('提醒', '到点了用什么方式通知你',
+      h('div', { style: { display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' } },
+        h('div', { style: { flex: '1 1 200px', minWidth: 180 } },
+          fieldLabel('提醒渠道'),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 6 } },
             h(BrandCheckbox, { checked: notifyPopup, onChange: () => setNotifyPopup(!notifyPopup) }),
             '应用内弹窗',
           ),
@@ -2399,13 +2584,13 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
             'DSH-IM 推送',
           ),
         ),
-        // v1.1 自选机器人（真实机器人 + 目标下拉）
-        notifyIm ? h('div', { style: { flex: 1, minWidth: 200 } },
-          h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', marginBottom: 4 } }, '自选机器人'),
+        // 自选机器人只在开了 IM 推送时出现，紧跟渠道选择——不再另起一列飘在别处
+        notifyIm ? h('div', { style: { flex: '1 1 220px', minWidth: 200 } },
+          fieldLabel('推送到哪个机器人'),
           h('select', {
             value: imBotId,
             onChange: (e) => { setImBotId(e.target.value); setImTargetId('') },
-            style: { ...selectStyle, width: '100%', marginBottom: 4 },
+            style: { ...selectStyle, width: '100%', marginBottom: 6 },
           },
             BOT_OPTIONS.map((opt) => h('option', { key: opt.value, value: opt.value }, opt.label)),
           ),
@@ -2417,32 +2602,38 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
             TARGET_OPTIONS.map((opt) => h('option', { key: opt.value, value: opt.value }, opt.label)),
           ),
         ) : null,
-        // 保存按钮
-        h('div', { style: { display: 'flex', alignItems: 'flex-end' } },
-          h('button', {
-            type: 'button', onClick: save,
-            style: { padding: '6px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: 'var(--dsw-alias-brand-primary, #f59e0b)', color: '#fff', cursor: 'pointer', fontWeight: 500 },
-          }, saved ? '已保存 ✓' : '保存'),
+        h('div', { style: { flex: '1 1 200px', minWidth: 180 } },
+          fieldLabel('AI 没识别出时间时，默认提醒'),
+          h('select', {
+            value: aiDefaultReminder,
+            onChange: (e) => applyAiReminderChange(e.target.value),
+            style: { ...selectStyle, width: '100%' },
+          },
+            AI_REMINDER_OPTIONS.map((opt) => h('option', { key: opt.value, value: opt.value }, opt.label)),
+          ),
         ),
       ),
-      // v1.2.2 反馈⑤：左侧边栏显示开关（变更后需重启 DSH 生效——侧栏槽为一次性注册）
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 10 } },
-        h(BrandCheckbox, { checked: sidebarEnabled, onChange: () => setSidebarEnabled(!sidebarEnabled) }),
-        '在左侧边栏显示待办清单（变更后重启 DSH 生效）',
+      // 保存按钮只作用于上面这几个「提醒」选项，就近放在这组底部
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 } },
+        h('button', {
+          type: 'button', onClick: save,
+          style: { padding: '6px 16px', fontSize: 13, border: 'none', borderRadius: 6, background: 'var(--dsw-alias-brand-primary, #f59e0b)', color: '#fff', cursor: 'pointer', fontWeight: 500 },
+        }, saved ? '已保存 ✓' : '保存提醒设置'),
+        h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' } },
+          '渠道 / 机器人 / 默认时间改完要点一下；AI 模型是选完即生效。'),
       ),
     ),
-    // v1.1.2 AI 记录默认提醒时间（AI 判断不出时间时兜底）
-    h('div', { style: { marginBottom: 14 } },
-      h('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', marginBottom: 4 } }, 'AI 记录默认提醒时间'),
-      h('select', {
-        value: aiDefaultReminder,
-        onChange: (e) => applyAiReminderChange(e.target.value),
-        style: { ...selectStyle, width: '100%' },
-      },
-        AI_REMINDER_OPTIONS.map((opt) => h('option', { key: opt.value, value: opt.value }, opt.label)),
+
+    // ③ 界面：侧栏开关（勾选即保存，因为离按钮远）
+    sectionCard('界面', null,
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 } },
+        h(BrandCheckbox, { checked: sidebarEnabled, onChange: () => applySidebarChange(!sidebarEnabled) }),
+        '在左侧边栏显示待办清单',
+        h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' } }, '（变更后重启 DSH 生效）'),
       ),
     ),
-    // v1.5.3：导出折叠区（用户要求：侧栏保持简洁，导出放在设置详情页里可展开）
+
+    // ④ 数据：导出（折叠区，侧栏保持简洁）
     h('div', { style: { marginBottom: 14, border: '1px solid var(--dsw-alias-border-l2, #eee)', borderRadius: 10, overflow: 'hidden' } },
       h('button', {
         type: 'button',
@@ -3412,8 +3603,10 @@ async function applyInner(ctx) {
       // �?v0.9.7 消息级定位：等待会话异步渲染，滚动到划词段落并高�
       if (locator && (locator.messageId || locator.anchorText)) {
         console.log('[dsh-todo] revealing locator:', locator)
-        const hit = await waitAndReveal(locator)
+        // v1.5.7：早期消息不在窗口里，需要主动向前翻页
+        const hit = await waitAndRevealWithPaging(sessionId, locator, { ctx })
         console.log('[dsh-todo] locator reveal result:', hit)
+        if (!hit) console.warn('[dsh-todo] 向前翻页仍没找到目标，可能已超出历史范围')
       }
     }
     console.log('[dsh-todo] session navigation ready (uiWorkspace)')

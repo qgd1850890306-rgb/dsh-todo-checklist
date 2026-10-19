@@ -3,6 +3,45 @@
 本插件遵循语义化版本：`主版本.次版本.修订号`。
 早期版本（0.x）为内部迭代，自 `1.0.0` 起面向使用者记录。
 
+## 1.5.9 — 2026-10-20
+
+修「点击待办能跳到会话，但目标那句不高亮」。
+
+### 修复
+
+- **向前翻页从未真正执行**：会话历史是窗口化分页的（默认只加载尾部一页），早期消息根本不在 DOM 里，纯轮询等不到。v1.5.7 加过翻页逻辑，但外层先 `++revealToken` 拿号、内层 `waitAndReveal` 又自增一次，导致紧接着的 `if (token !== revealToken) return false` 恒为真——翻页是死代码，一次都没跑过。现在由最外层发一次号，内层轮询只读不写。
+- **跨内联元素的锚点匹配不上**：原先按「单个文本节点」判包含，而 markdown 会把一句话拆进 `<strong>` / `<code>` / `<a>`，锚点一旦跨越元素边界就永远找不到。改为先按消息容器整块比对 `textContent`，再回退到文本节点遍历。
+- 捕获与定位改用 DSH 会话真实存在的 `data-chat-node-key` / `data-chat-anchor-key` / `data-chat-flow-key`；`data-message-id` 等旧属性在该 DOM 里出现次数为 0，仅作兜底。
+
+### English
+
+- **The paging loop never ran**: the transcript is window-paged (only the tail page is loaded), so messages from much earlier are not in the DOM at all. v1.5.7 added paging, but the outer scope took a `++revealToken` generation while `waitAndReveal` incremented it again, so `if (token !== revealToken) return false` was always true — dead code. The generation is now issued once, at the outermost level.
+- **Anchors spanning inline elements never matched**: matching was per text node, but markdown splits a sentence across `<strong>` / `<code>` / `<a>`. Now the message container's whole `textContent` is compared first, falling back to text-node walking.
+- Capture and lookup now use the attributes the DSH transcript really has: `data-chat-node-key` / `data-chat-anchor-key` / `data-chat-flow-key`.
+## 1.5.8 — 2026-10-20
+
+### 改进
+
+- **设置页按语义重新分组**：此前「AI 记录模型 / 提醒渠道 / 自选机器人」挤在同一行，而「AI 默认提醒时间」掉在卡片外面、「侧栏开关」埋在卡片最底部，同类项被拆到两个地方。现在从上到下四组，每组的标题就是它的用途：**记录**（AI 用什么模型帮我记）→ **提醒**（到点了怎么通知我：渠道 + 机器人 + 没写时间时默认什么时候提醒）→ **界面**（侧栏显不显示）→ **数据**（导出）。
+- **保存按钮跟着它管的东西走**：旧版保存按钮在卡片最右，但它只保存「提醒」相关的几项，AI 模型和默认提醒时间都是选完即生效 —— 按钮的作用范围看不出来。现在按钮就在「提醒」组底部，文案改成「保存提醒设置」，并写明哪些改完要保存、哪些选完即生效。
+- **侧栏开关改成勾选即保存**：它搬到了独立的「界面」组，离保存按钮很远，再要求「勾完还要去点保存」容易漏。
+
+### 新增
+
+- **导出格式可以多选**：勾几个格式就下载几个文件，一次要把 HTML 和 Excel 各存一份不用点两轮。取消到最后一个时会回落到 HTML，不会出现「一个格式都没选、点了导出没反应」的死状态。
+
+### 修复（1.5.7 内容，一并发版）
+
+- **点击待办跳转会话后不再「跳过去但不高亮」**。三个独立原因：①插件抓的是 `data-message-id` 这类属性，而 DSH 会话 DOM 里根本不存在，实际属性是 `data-chat-node-key` / `data-chat-anchor-key`，导致锚点信息一直抓不到；②会话历史是分页加载的（一次只加载尾部约 500 条消息），而待办的出处常在几千条之前，目标文本压根不在 DOM 里，插件只轮询 12 秒就静默放弃；③锚点匹配以单个文本节点为单位，跨粗体/代码等内联元素的句子会被拆开，永远匹配不上。现在改用真实属性、找不到时主动向前翻页（最多 10 页）、并按整块元素而不是文本节点匹配。
+
+### English
+
+- **Settings regrouped by purpose**: AI model, reminder channels and bot picker used to share one row while the default reminder time fell outside the card and the sidebar toggle sat at the very bottom — related items split across two places. Now four groups top-to-bottom: **Recording** → **Reminders** (channel + bot + default time when the AI cannot infer one) → **Appearance** (sidebar) → **Data** (export).
+- **The save button moved next to what it saves**: it used to sit at the far right of the card while only governing the reminder options (the AI model and default reminder time save on selection). It now sits at the bottom of the Reminders group, labelled "Save reminder settings", with a line saying which changes need saving and which apply immediately.
+- **The sidebar toggle saves on click**, since it now lives in its own Appearance group far from the save button.
+- **Export formats are multi-select**: tick several formats and each downloads its own file — no more two rounds of clicks to get both HTML and Excel. Unchecking down to the last one falls back to HTML, so there is never a "nothing selected, nothing happens" state.
+- **Fix (1.5.7, shipped together): clicking a todo no longer jumps to the session without highlighting.** Three independent causes: (1) the plugin looked for `data-message-id` and friends, which do not exist in the DSH chat DOM — the real attributes are `data-chat-node-key` / `data-chat-anchor-key`, so the anchor was never captured; (2) session history is paged (roughly the last 500 messages), and a todo's origin is often thousands of messages back, so the target text was not in the DOM at all while the plugin just polled for 12 seconds and gave up silently; (3) anchor matching worked per text node, so a sentence split by bold or inline code could never match. It now uses the real attributes, pages backwards when the target is not loaded (up to 10 pages), and matches whole element blocks instead of individual text nodes.
+
 ## 1.5.6 — 2026-10-19
 
 ### 修复
