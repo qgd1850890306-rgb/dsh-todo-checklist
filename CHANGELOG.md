@@ -3,6 +3,27 @@
 本插件遵循语义化版本：`主版本.次版本.修订号`。
 早期版本（0.x）为内部迭代，自 `1.0.0` 起面向使用者记录。
 
+## 1.5.10 — 2026-10-20
+
+设置页拆成「设置 / 待办清单」两页，并修掉三处「点了没反应」的操作体验问题。
+
+### 改进
+
+- **设置页分成横向两页**：上页是插件设置（记录 / 提醒 / 界面），下页是待办清单（导出 / 状态筛选 / 列表）。此前四组设置、导出折叠区、状态 tab、待办列表全挤在一列，要处理待办得先滚过一整屏设置。切页按钮在顶部版本行，一次点击可来回切。
+- **toast 提示挪到两页之外**：提示是 fixed 定位浮层，此前挂在列表那一页的渲染树里，切到设置页时保存失败的提示就看不见了。
+
+### 修复
+
+- **设置页里点待办，设置页不关**：goSource 原本是先 await sessionOpen(...) 再 closeSettings()。而 sessionOpen 打开会话后还要等高亮定位（目标消息可能要先向前翻页几十页），早期消息能等十几秒甚至更久——设置页就一直盖在上面，看起来像「点了没反应」。现在先关设置页再跳转。
+- **「以此待办新建会话」同样处理**：建会话要等宿主 attach，此前也是先跳后关，同样是「点了不动」的观感。
+- **编辑弹窗里多余的「默认目标」下拉**：与新增弹窗、设置页保持一致，删掉。它的第一项「默认目标（第一个）」等于不指定 target，宿主会按「待办指定 → 全局配置 → 机器人第一个」回落，留这个下拉只是多一次点击。
+
+### English
+
+- **Settings page split into two tabs**: settings (records / reminders / interface) and the todo list (export / status filter / rows). Four settings groups, the export panel, status tabs and the list used to share one column, so reaching the list meant scrolling past a full screen of settings.
+- **Toast moved outside both tabs**: it is a fixed overlay, and previously lived only in the list page tree, so a failed save on the settings page showed nothing.
+- **Opening a todo from the settings page now closes settings before jumping**: the old order awaited the session open (plus highlight reveal, which may page back through history for many seconds) and only then closed, so settings stayed on top and the click looked dead.
+- **Removed the redundant "default target" dropdown from the edit dialog**, matching the add dialog and the settings page.
 ## 1.5.9 — 2026-10-20
 
 修「点击待办能跳到会话，但目标那句不高亮」。

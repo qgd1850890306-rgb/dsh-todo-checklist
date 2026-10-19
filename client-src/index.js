@@ -1375,14 +1375,9 @@ function TodoPopup({ text, sessionId, locator, todosApi, onClose, onAdded, showT
       h('option', { value: '' }, '全部机器人（跟随全局）'),
         imBots.map((bot) => h('option', { key: bot.botId, value: bot.botId }, imBotLabel(bot))),
       ),
-      h('select', {
-        value: imTargetId,
-        onChange: (e) => setImTargetId(e.target.value),
-        style: { flex: 1, minWidth: 0, padding: '6px 8px', fontSize: 12, borderRadius: 8, border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)', boxSizing: 'border-box' },
-      },
-        h('option', { value: '' }, '默认目标（第一个）'),
-        (imBots.find((bot) => bot.botId === imBotId)?.targets ?? []).map((t) => h('option', { key: t.targetId, value: t.targetId }, t.name ? `${t.name} · ${t.targetId}` : t.targetId)),
-      ),
+      // v1.5.10：目标下拉已移除。它的第一个选项就是「默认目标（第一个）」，
+      // 选中它等于不传 target —— 宿主会先回落到全局配置，再回落到该机器人的第一个目标。
+      // 一个下拉里只有「用默认」和「用默认」两种选择，属于多余项。
     ) : null,
     h('div', { style: style.popupButtons },
       h('button', { type: 'button', style: style.ghostButton, onClick: onClose }, '取消'),
@@ -1688,7 +1683,7 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
         const result = buildExportFile(all, {
           format: target.id,
           scopes,
-          appVersion: '1.5.9',
+          appVersion: '1.5.10',
         })
         done.push(downloadExportFile(result))
       }
@@ -2153,7 +2148,7 @@ h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'spac
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', { style: { fontSize: 16 } }, '📋'),
           h('span', { style: { fontSize: 15, fontWeight: 600 } }, '待办清单设置'),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.9'),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.10'),
         ),
         h('button', { type: 'button', onClick: onClose, style: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--dsh-alias-label-secondary)', padding: '4px 8px' } }, '×'),
       ),
@@ -2243,6 +2238,7 @@ function imBotLabel(bot) {
 
 //#region v0.9.4 设置页面（复�?dsh-archive-manager 风格：头�?tab+筛�?列表�
 function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceOfSession, createFollowupSession, closeSettings }) {
+  const [page, setPage] = useState('settings') // settings | records
   const [tab, setTab] = useState('pending') // pending | overdue | completed | abandoned
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
@@ -2333,12 +2329,8 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
 
     ...imBots.map((b) => ({ value: b.botId, label: imBotLabel(b) })),
   ]
-  // 选中机器人的目标列表
-  const selectedBot = imBots.find((b) => b.botId === imBotId)
-  const TARGET_OPTIONS = [
-    { value: '', label: '默认目标（第一个）' },
-    ...((selectedBot?.targets ?? []).map((t) => ({ value: t.targetId, label: t.name ? `${t.name} · ${t.targetId}` : t.targetId }))),
-  ]
+  // v1.5.10：TARGET_OPTIONS / selectedBot 已删除。目标下拉从设置页移除后，
+  // 这两个只服务于下拉的派生值成为死代码；目标由宿主发送时决定（见 host/index.js 的回落链）。
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -2479,34 +2471,37 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
     setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
-  // 反馈①：点击标题跳回划词位置（含归档恢复+高亮�
+  // 反馈①：点击标题跳回划词位置（含归档恢复+高亮）
   const goSource = useCallback(async (item) => {
     if (!item.sessionId || typeof sessionOpen !== 'function') { showToast('该待办无来源会话'); return }
     try {
       showToast('正在跳转到划词位置…')
+      // v1.5.10：先关设置页，再跳转。
+      // sessionOpen 打开会话后还要等渲染 + 向前翻页找目标句，早期消息可能几十秒才返回；
+      // 把关闭放在 await 之后，用户会一直停在设置页上，看起来像「点了没反应」。
+      if (typeof closeSettings === 'function') closeSettings()
       await sessionOpen(item.sessionId, {
         ...(item.messageId ? { messageId: item.messageId } : {}),
         ...(item.anchorText ? { anchorText: item.anchorText } : {}),
       })
-      // v0.9.9 需求①：跳转成功后自动关闭设置�
-      if (typeof closeSettings === 'function') closeSettings()
     } catch { showToast('会话不存在或已归档，暂无法自动恢复') }
   }, [sessionOpen, showToast, closeSettings])
 
   // 反馈⑤：一键以该待办为蓝本新建会话
-  // v1.1.7：传 todoId——新会话发出首条消息后待办自动标�?completed
+  // v1.1.7：传 todoId——新会话发出首条消息后待办自动标为 completed
   const followup = useCallback(async (item) => {
     try {
-      // v1.2.6：等待提示延长到 6s（此�?2s 闪没，用户以为点击无效）
+      // v1.2.6：等待提示延长到 6s（此前 2s 闪没，用户以为点击无效）
       showToast({ text: '正在新建会话…发送后待办自动完成', ms: 6000 })
+      // v1.5.10：与 goSource 一致，先把设置页收掉再去做耗时的建会话。
+      // 建会话要等宿主 attach，其间设置页盖在会话上，看起来就是「点了不动」。
+      if (typeof closeSettings === 'function') closeSettings()
       await createFollowupSession({
         sourceSessionId: item.sessionId,
         title: item.title,
         content: item.content ?? item.title,
         todoId: item.id,
       })
-      // v0.9.9 需求②：新建会话后已跳转，关闭设置�
-      if (typeof closeSettings === 'function') closeSettings()
     } catch (e) {
       showToast(`新建会话失败：${e?.message ?? e}`)
     }
@@ -2546,13 +2541,35 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
     // 头部（参考 dsh-archive-manager）
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '16px 0', borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)' } },
       h('h2', { style: { fontSize: 20, fontWeight: 600, margin: 0 } }, '待办清单'),
-      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.9'),
+      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.10'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 'auto' } }, 'GitHub'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/issues', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none' } }, '问题反馈'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/releases', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 8 } }, '检查更新'),
     ),
     h('p', { style: { fontSize: 13, color: 'var(--dsw-alias-label-secondary)', margin: '8px 0 16px' } }, '划词加待办清单 · AI 总结 · 定时提醒'),
 
+    // v1.5.10：横向两页（设置 / 待办清单）。
+    // 此前设置组、导出、状态 tab、列表全堆在一列，滚到列表时设置项还在上面，改完了不知道该往哪看。
+    // 分成两页后「改设置」和「处理待办」各自独立，切换成本只有一次点击。
+    h('div', { role: 'tablist', style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)', marginBottom: 16 } },
+      [{ id: 'settings', label: '设置' }, { id: 'records', label: `待办清单 (${pendingCount})` }].map((p) => h('button', {
+        key: p.id,
+        type: 'button',
+        role: 'tab',
+        'aria-selected': page === p.id,
+        onClick: () => setPage(p.id),
+        style: {
+          padding: '8px 16px', fontSize: 13, fontWeight: page === p.id ? 600 : 400,
+          border: 'none', background: 'transparent', cursor: 'pointer',
+          color: page === p.id ? 'var(--dsw-alias-brand-primary, #f59e0b)' : 'var(--dsw-alias-label-secondary)',
+          borderBottom: page === p.id ? '2px solid var(--dsw-alias-brand-primary, #f59e0b)' : '2px solid transparent',
+          marginBottom: -1,
+        },
+      }, p.label)),
+    ),
+
+    page !== 'settings' ? null :
+    h(Fragment, null,
     // ① 记录：AI 用什么模型帮我记
     sectionCard('记录', 'AI 帮你把一句话变成一条待办',
       h('div', { style: { display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' } },
@@ -2594,13 +2611,10 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
           },
             BOT_OPTIONS.map((opt) => h('option', { key: opt.value, value: opt.value }, opt.label)),
           ),
-          h('select', {
-            value: imTargetId,
-            onChange: (e) => setImTargetId(e.target.value),
-            style: { ...selectStyle, width: '100%' },
-          },
-            TARGET_OPTIONS.map((opt) => h('option', { key: opt.value, value: opt.value }, opt.label)),
-          ),
+          // v1.5.10：这里原本还有一个「默认目标」下拉，已移除。
+          // 它的选项列表第一项是「默认目标（第一个）」，选它等于不指定 target；
+          // 其余项来自该机器人的 targets。目标由宿主在发送时按「待办指定 → 全局配置 → 机器人第一个」回落决定，
+          // 设置页把这段回落实现在下拉里既不可见也不可控，属于多余控件。
         ) : null,
         h('div', { style: { flex: '1 1 200px', minWidth: 180 } },
           fieldLabel('AI 没识别出时间时，默认提醒'),
@@ -2632,7 +2646,10 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
         h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' } }, '（变更后重启 DSH 生效）'),
       ),
     ),
+    ),
 
+    page !== 'records' ? null :
+    h(Fragment, null,
     // ④ 数据：导出（折叠区，侧栏保持简洁）
     h('div', { style: { marginBottom: 14, border: '1px solid var(--dsw-alias-border-l2, #eee)', borderRadius: 10, overflow: 'hidden' } },
       h('button', {
@@ -2857,11 +2874,12 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
         onConverted: () => { void refresh() },
         showToast,
       }) : null,
-      // v1.5.3：导出改为设置页内联折叠区（v1.5.0 的弹窗出口已移除）
-      // v1.2.5 修复"设置页↗点击没反应"：showToast 只 setToast 但渲染树无出口——
-      // 补上 toast 渲染（fixed 定位浮层，与侧栏同款样式）
-      toast !== null ? h('div', { style: { ...style.toast, position: 'fixed', right: 20, bottom: 12, zIndex: 2147483646, pointerEvents: 'none' } }, toast) : null,
     ),
+    ),
+
+    // v1.5.10：toast 挪到两页之外——设置页保存失败、跳转失败也要能看到提示，
+    // 放在「待办清单」页的 Fragment 里就只在那一页可见。fixed 定位，不影响布局。
+    toast !== null ? h('div', { style: { ...style.toast, position: 'fixed', right: 20, bottom: 12, zIndex: 2147483646, pointerEvents: 'none' } }, toast) : null,
   )
 }
 //#endregion
@@ -3080,15 +3098,9 @@ function TodoEditDialog({ item, todosApi, onClose, onSaved, onConvert, showToast
         h('option', { value: '' }, '全部机器人（跟随全局）'),
         imBots.map((b) => h('option', { key: b.botId, value: b.botId }, imBotLabel(b))),
       ),
-      h('select', {
-        value: targetId,
-        onChange: (e) => setTargetId(e.target.value),
-        style: { ...selectMini, flex: 1 },
-      },
-        h('option', { value: '' }, '默认目标（第一个）'),
-        (imBots.find((b) => b.botId === botId)?.targets ?? []).map((t) =>
-          h('option', { key: t.targetId, value: t.targetId }, t.name ? `${t.name} · ${t.targetId}` : t.targetId)),
-      ),
+      // v1.5.10：目标下拉已移除，与新增弹窗、设置页保持一致。
+      // 它的第一项「默认目标（第一个）」等于不指定 target，宿主会按
+      // 「待办指定 → 全局配置 → 机器人第一个」回落；留这个下拉只是多一次点击。
     ) : null,
     h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', marginTop: 6 } },
       popup && im ? '到点将同时应用内弹窗 + 机器人推送' : (!popup && !im ? '到点不提醒（仅在列表中显示）' : '')),
