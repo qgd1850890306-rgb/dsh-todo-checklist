@@ -50,11 +50,9 @@
       "versions": [
         {
           "version": "1.5.4",
-          "publishTimestamp": 1792386000,
+          "publishTimestamp": 1792422485,
           "source": {
-            "type": "git",
-            "url": "https://github.com/qgd1850890306-rgb/dsh-todo-checklist",
-            "commit": "5ba63b78458799745fc5c500af038d41adcc13c3"
+            "type": "npm"
           }
         }
       ]

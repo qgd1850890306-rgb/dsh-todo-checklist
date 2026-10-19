@@ -135,26 +135,31 @@ todo_export({ format: "md" | "csv" | "json" | "html", scope: "all" | "pending" |
 
 ## 📦 Install · 安装
 
-> **这个包没有发布到 npm。** 它只通过 GitHub 分发，所以直接 `dsh plugin add dsh-todo-checklist`
-> （只写包名）会报 `404 Not Found`。请用下面两条命令之一。
+**方式一 —— 从 npm 装（推荐，一行命令）**
 
-**方式一 —— 从 GitHub 装（推荐，一行命令）**
+```bash
+dsh plugin --profile desktop add dsh-todo-checklist
+```
+
+包已发布在公共 npm（`https://www.npmjs.com/package/dsh-todo-checklist`），当前版本 `1.5.4`。想钉住版本可以写 `dsh-todo-checklist@1.5.4`。
+
+**方式二 —— 从 GitHub 装**
 
 ```bash
 dsh plugin --profile desktop add https://github.com/qgd1850890306-rgb/dsh-todo-checklist.git
 ```
 
-构建好的 `lib/` 已在仓库里，安装时不需要编译 —— 不会弹 `allowBuilds` 授权，也不需要本地工具链。
+构建好的 `lib/` 在仓库里，两种方式安装时都不需要编译 —— 不会弹 `allowBuilds` 授权，也不需要本地工具链。
 
-**方式二 —— 本地目录或 tarball**（离线 / 内网）
+**方式三 —— 本地目录或 tarball**（离线 / 内网）
 
 ```bash
 dsh plugin --profile desktop add <本地目录或 .tgz 的绝对路径>
 ```
 
-**在界面上装**：**插件** → **添加插件** → 粘贴上面那条 GitHub URL（和方式一同一串）。
+**在界面上装**：**插件** → **添加插件** → 填 `dsh-todo-checklist`，或粘贴上面的 GitHub URL。
 
-**在官方「发现」页里装**：本仓库根目录带了一份 `index.json`，是按 DSH 官方的 **format 1 插件市场索引**写的（`source.type = git`，钉在发版的 commit 上）。把它加成索引源即可：
+**在官方「发现」页里装**：本仓库根目录带了一份 `index.json`，按 DSH 官方的 **format 1 插件市场索引**写成（`source.type = git`，钉在发版的 commit 上）。把它加成索引源：
 
 1. **设置** → **插件** → **发现** → **添加索引源**
 2. 填这个地址（镜像，带 CORS，本机可达）：
@@ -163,12 +168,12 @@ dsh plugin --profile desktop add <本地目录或 .tgz 的绝对路径>
 https://cdn.jsdelivr.net/gh/qgd1850890306-rgb/dsh-todo-checklist@main/index.json
 ```
 
-> 为什么官方的社区目录里搜不到：`awesome-dsh-plugin` 那份目录是另一套格式，而它对外提供的 format 1 索引（`index.json`）**只收已发布到 npm 的条目** —— 当前 3036 条全部是 npm 源，git 源 0 条。本插件只在 GitHub 分发，所以被那条规则跳过。上面的自建索引源是绕开这一步的正规做法；等发布到 npm 后这个索引会改成 npm 源。
+> 社区目录 `awesome-dsh-plugin` 会把 npm 上已发布的插件自动收录进它的 format 1 索引（每天刷新一次），发布到 npm 之后大约一天内就会出现在官方 Discover 里，不必手动加索引源。上方自建索引是即时可用的备用路径。
 
-**升级** —— 用同一个 GitHub URL 再装一次，会拉最新的 `main`：
+**升级**（npm 装法）：
 
 ```bash
-dsh plugin --profile desktop add https://github.com/qgd1850890306-rgb/dsh-todo-checklist.git
+dsh plugin --profile desktop add dsh-todo-checklist
 ```
 
 **卸载**：

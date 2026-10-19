@@ -135,24 +135,29 @@ Ask the model to "export all my todos as Markdown" and it returns the text direc
 
 ## 📦 Install · 安装
 
-> **Not on npm yet.** The package is distributed through GitHub only, so `dsh plugin add dsh-todo-checklist`
-> (bare package name) will fail with `404 Not Found`. Use one of the two commands below.
+**Option 1 — npm (recommended, one line)**
 
-**Option 1 — GitHub (recommended, one line)**
+```bash
+dsh plugin --profile desktop add dsh-todo-checklist
+```
+
+It is published on the public npm registry (`https://www.npmjs.com/package/dsh-todo-checklist`); current version `1.5.4`. Pin it with `dsh-todo-checklist@1.5.4` if you want.
+
+**Option 2 — GitHub**
 
 ```bash
 dsh plugin --profile desktop add https://github.com/qgd1850890306-rgb/dsh-todo-checklist.git
 ```
 
-The built `lib/` is committed, so nothing is compiled at install time — no `allowBuilds` prompt, no toolchain needed.
+The built `lib/` is committed, so neither route compiles anything at install time — no `allowBuilds` prompt, no toolchain needed.
 
-**Option 2 — Local directory or tarball** (offline / intranet)
+**Option 3 — Local directory or tarball** (offline / intranet)
 
 ```bash
 dsh plugin --profile desktop add <absolute path to directory or .tgz>
 ```
 
-**Via the UI**: **Plugins** → **Add plugin** → paste the GitHub URL above (the same string as Option 1).
+**Via the UI**: **Plugins** → **Add plugin** → enter `dsh-todo-checklist`, or paste the GitHub URL above.
 
 **Via the official Discover page**: the repository root carries an `index.json` written as a DSH **format 1 plugin market index** (`source.type = git`, pinned to the release commit). Add it as an index source:
 
@@ -163,12 +168,12 @@ dsh plugin --profile desktop add <absolute path to directory or .tgz>
 https://cdn.jsdelivr.net/gh/qgd1850890306-rgb/dsh-todo-checklist@main/index.json
 ```
 
-> Why it does not turn up in the community catalog: `awesome-dsh-plugin` publishes a catalog in a different format, and the format 1 index it exposes **only lists entries that are published to npm** — all 3036 entries today are npm-sourced, zero are git-sourced. This plugin ships through GitHub only, so that rule skips it. The self-hosted index above is the supported way around it; once the package is on npm this index will switch to `type: npm`.
+> The community catalog `awesome-dsh-plugin` picks up plugins published to npm into its format 1 index (refreshed once a day), so roughly a day after landing on npm this plugin shows up in Discover on its own — no manual index source needed. The self-hosted index above is an immediately usable fallback.
 
-**Upgrade** — re-add from the same GitHub URL; the newest `main` is fetched:
+**Upgrade** (npm route):
 
 ```bash
-dsh plugin --profile desktop add https://github.com/qgd1850890306-rgb/dsh-todo-checklist.git
+dsh plugin --profile desktop add dsh-todo-checklist
 ```
 
 **Uninstall**:
