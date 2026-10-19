@@ -1,6 +1,6 @@
 {
   "name": "dsh-todo-checklist",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "description": "DeepSeek Harness 待办插件：划词加入待办、对话自动捕获、左侧栏面板汇总与到期提醒（应用内弹窗或机器人推送），数据跨重启持久保存。Todo sidecar for DeepSeek Harness: selection-to-todo, chat-captured todos, a left sidebar panel and due reminders (in-app popup or IM bot push), persisted across restarts.",
   "type": "module",
   "packageManager": "pnpm@11.7.0",
