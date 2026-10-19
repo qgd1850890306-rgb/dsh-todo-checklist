@@ -1,0 +1,63 @@
+{
+  "format": 1,
+  "title": {
+    "zh": "DSH 待办清单",
+    "en": "DSH Todo Checklist"
+  },
+  "description": {
+    "zh": "划词加待办 · AI 总结 · 定时提醒 · 多格式导出",
+    "en": "Selection-to-todo, AI summary, reminders, multi-format export"
+  },
+  "metadata": {
+    "categories": {
+      "ui": {
+        "title": {
+          "zh": "界面增强",
+          "en": "UI"
+        }
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "dsh-todo-checklist",
+      "title": {
+        "zh": "待办清单",
+        "en": "Todo Checklist"
+      },
+      "description": {
+        "zh": "划选对话文本即可加入待办、对话结束自动捕获、左侧面板汇总勾选，支持到期提醒（应用内弹窗或机器人推送）与跨重启持久保存，可导出 HTML/Markdown/Excel/CSV/JSON。",
+        "en": "Selection-to-todo, chat-captured todos, a left sidebar panel with due reminders, persisted across restarts, and HTML/Markdown/Excel/CSV/JSON export."
+      },
+      "author": "qgd1850890306-rgb",
+      "homepage": "https://github.com/qgd1850890306-rgb/dsh-todo-checklist",
+      "repository": {
+        "url": "https://github.com/qgd1850890306-rgb/dsh-todo-checklist"
+      },
+      "metadata": {
+        "category": "ui",
+        "keywords": [
+          "todo",
+          "task",
+          "reminder",
+          "待办",
+          "清单",
+          "export"
+        ],
+        "labels": [],
+        "sortKeys": {}
+      },
+      "versions": [
+        {
+          "version": "1.5.4",
+          "publishTimestamp": 1792386000,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/qgd1850890306-rgb/dsh-todo-checklist",
+            "commit": "5ba63b78458799745fc5c500af038d41adcc13c3"
+          }
+        }
+      ]
+    }
+  ]
+}
