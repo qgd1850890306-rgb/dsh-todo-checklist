@@ -50,11 +50,11 @@ Everything lands in **one sidebar panel** on the left edge — the same place ev
 </tr>
 </table>
 
-**Export: a collapsible section on the settings page — eight records in, one self-contained file out, pick the format by who reads it**
+**Export: a collapsible section on the settings page — pick several scopes and several formats at once, each format downloads its own self-contained file**
 
 ![Export section](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/export.png)
 
-**Settings page: model, reminder channel, sidebar toggle, and the full record list with four tabs**
+**Settings page, split into two tabs — `Settings` holds the plugin options, `Todo list` holds the full record list**
 
 ![Settings page](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/settings.png)
 

@@ -50,11 +50,11 @@
 </tr>
 </table>
 
-**导出：设置页里的折叠区 —— 8 条记录进去，一个自包含文件出来，按「谁读」选格式**
+**导出：设置页里的折叠区 —— 范围和格式都能多选，每个格式各下载一个自包含文件**
 
 ![导出区](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/export.png)
 
-**设置页：模型、提醒渠道、侧栏开关，以及带四个分组的完整记录列表**
+**设置页拆成两页 —— 「设置」放插件选项，「待办清单」放完整记录列表**
 
 ![设置页](https://raw.githubusercontent.com/qgd1850890306-rgb/dsh-todo-checklist/main/docs/screenshots/settings.png)
 
