@@ -14,7 +14,11 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
-const src = fs.readFileSync(path.join(HERE, 'host-e2e.mjs'), 'utf8')
+// 源文件是 CRLF（Windows 检出），本脚本里的模板串是 LF。
+// 单行片段两边都能匹配，但多行 shimBlock 会永远匹配不上 —— 原实现没做归一化，
+// 这个生成器在 CRLF 检出下必然报「未找到待替换片段」。
+const normalize = (s) => s.replace(/\r\n/g, '\n')
+const src = normalize(fs.readFileSync(path.join(HERE, 'host-e2e.mjs'), 'utf8'))
 
 const rep = (from, to, text) => {
   if (!text.includes(from)) throw new Error('未找到待替换片段：' + from.slice(0, 60))
@@ -24,21 +28,24 @@ const rep = (from, to, text) => {
 let out = src
 
 out = rep(
-  `const PLUGIN = process.env.DSH_TODO_PLUGIN_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dsh-todo')`,
-  `const PLUGIN = process.env.DSH_TODO_PLUGIN_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dsh-todo')
+  `const PLUGIN = resolvePlugin()`,
+  `const PLUGIN = resolvePlugin()
 const ROOT_DIR = PLUGIN`,
   out,
 )
 
 out = rep(
-  `const STORE_TMP = path.join(PLUGIN, '_h_store.mjs')
-const HOST_TMP = path.join(PLUGIN, '_h_host.mjs')`,
+  `const STORE_TMP = path.join(PLUGIN, '_h_store.mjs')`,
   `const ROOT_TMP = path.join(os.tmpdir(), 'dsh-todo-e2e-bundle')
 const BUNDLE_DIR = path.join(ROOT_TMP, 'bundle')
 const HOST_TMP = path.join(BUNDLE_DIR, 'host.js')
 const TYPERT_TMP = path.join(BUNDLE_DIR, 'typert.js')`,
   out,
 )
+// 原有第二行 HOST_TMP 声明要删掉（已被上面的 BUNDLE_DIR 版取代）。
+// 用幂等写法：上次替换若已把它并进 STORE_TMP 模式串里，这里就没有可删的行。
+const oldHostTmp = `const HOST_TMP = path.join(PLUGIN, '_h_host.mjs')\n`
+if (out.includes(oldHostTmp)) out = out.replace(oldHostTmp, '')
 
 const shimBlock = `// 生成 shim（zod 从插件 node_modules 解析；defineDomain/defineTool 用恒等替代）
 let storeSrc = fs.readFileSync(path.join(PLUGIN, 'host', 'store.js'), 'utf8')

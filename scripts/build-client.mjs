@@ -38,6 +38,11 @@ const result = await build({
   legalComments: 'none',
   write: false,
   jsx: 'transform',
+  // 版本号在构建期从 package.json 注入，源码里不再写死。
+  // 此前 client-src/index.js 手写 appVersion: '1.5.11'，每发一版都要记得改，
+  // 漏改就会出现「包是 1.5.12、导出文件上写着 1.5.11」。
+  // define 只替换独立标识符，不会误伤字符串内容。
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   // 依赖（zod）从本脚本所在包解析：发布打包时 --root 指向另一个目录，
   // 那个目录没有 node_modules（依赖不随包发布）。
   nodePaths: [join(scriptRoot, 'node_modules')],

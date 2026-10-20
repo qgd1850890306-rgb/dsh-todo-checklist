@@ -15,7 +15,16 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const PLUGIN = process.env.DSH_TODO_PLUGIN_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dsh-todo')
+// 解析目标包目录：① 环境变量 ② 上一级本身就是插件包（GitHub 仓库布局：tests/ 的父目录即包根）
+// ③ 旧布局 ..\dsh-todo（工作区里 dsh-todo-plugin\tests\ 与 dsh-todo-plugin\dsh-todo\ 并列）
+// 原实现只写死了 ③，把本目录搬进仓库后路径变成 ...\dsh-todo-checklist\dsh-todo\，直接 ENOENT。
+const resolvePlugin = () => {
+  if (process.env.DSH_TODO_PLUGIN_DIR) return process.env.DSH_TODO_PLUGIN_DIR
+  const parent = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+  if (fs.existsSync(path.join(parent, 'host', 'store.js'))) return parent
+  return path.join(parent, 'dsh-todo')
+}
+const PLUGIN = resolvePlugin()
 const ROOT_DIR = PLUGIN
 const ROOT_TMP = path.join(os.tmpdir(), 'dsh-todo-e2e-bundle')
 const BUNDLE_DIR = path.join(ROOT_TMP, 'bundle')
@@ -147,6 +156,26 @@ check('A20b 头部计数含已放弃，与正文勾选数一致',
   listText.split('\n')[0])
 await svc.deleteTodo({ id: mkPending.value.id })
 await svc.deleteTodo({ id: mkAbandon.value.id })
+
+// v1.5.11 反馈②：思考强度（reasoningEffort）必须能存能读，
+// 且建会话时要真的进 agentOptions —— 只存在设置里不进请求 = 用户选了个寂寞。
+const setEff = await svc.setAiModel({ provider: 'deepseek', model: 'v4', reasoningEffort: 'max' })
+check(
+  'A21 setAiModel 落 reasoningEffort 且 list 回读得到',
+  setEff.ok === true
+    && (await svc.list({})).value.aiModel?.reasoningEffort === 'max'
+    && (await svc.list({})).value.aiModel?.provider === 'deepseek',
+  JSON.stringify((await svc.list({})).value.aiModel ?? null),
+)
+
+// 不传强度时应回到「不指定」，而不是留着上一次的值
+const clearEff = await svc.setAiModel({ provider: 'deepseek', model: 'v4' })
+check(
+  'A21b 不传思考强度时清空（回落模型默认档）',
+  clearEff.ok === true && (await svc.list({})).value.aiModel?.reasoningEffort === undefined,
+  JSON.stringify((await svc.list({})).value.aiModel ?? null),
+)
+await svc.setAiModel({ provider: '', model: '' })
 
 // ---------- B. 精简环境（无 agents / llm / dshIm） ----------
 const cap = await svc.aiCapture({ text: '明天给供应商发 DFMEA 模板' })

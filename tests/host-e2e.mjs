@@ -15,7 +15,16 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const PLUGIN = process.env.DSH_TODO_PLUGIN_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dsh-todo')
+// 解析目标包目录：① 环境变量 ② 上一级本身就是插件包（GitHub 仓库布局：tests/ 的父目录即包根）
+// ③ 旧布局 ..\dsh-todo（工作区里 dsh-todo-plugin\tests\ 与 dsh-todo-plugin\dsh-todo\ 并列）
+// 原实现只写死了 ③，把本目录搬进仓库后路径变成 ...\dsh-todo-checklist\dsh-todo\，直接 ENOENT。
+const resolvePlugin = () => {
+  if (process.env.DSH_TODO_PLUGIN_DIR) return process.env.DSH_TODO_PLUGIN_DIR
+  const parent = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+  if (fs.existsSync(path.join(parent, 'host', 'store.js'))) return parent
+  return path.join(parent, 'dsh-todo')
+}
+const PLUGIN = resolvePlugin()
 const STORE_TMP = path.join(PLUGIN, '_h_store.mjs')
 const HOST_TMP = path.join(PLUGIN, '_h_host.mjs')
 const STATE_DIR = path.join(os.tmpdir(), `dsh-todo-e2e-${Date.now()}`)

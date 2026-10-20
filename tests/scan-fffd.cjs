@@ -4,9 +4,15 @@
 // 用法：node scan-fffd.cjs <要扫描的文件>（默认扫 client-src/index.js）
 const fs = require('node:fs')
 const path = require('node:path')
+// 目标包目录：① 显式参数 ② 环境变量 ③ 上一级本身就是插件包（仓库布局） ④ 旧布局 ..\dsh-todo
+const resolveDefault = () => {
+  const parent = path.resolve(__dirname, '..')
+  if (fs.existsSync(path.join(parent, 'client-src', 'index.js'))) return path.join(parent, 'client-src', 'index.js')
+  return path.join(parent, 'dsh-todo', 'client-src', 'index.js')
+}
 const file = process.argv[2]
-  || process.env.DSH_TODO_PLUGIN_DIR && path.join(process.env.DSH_TODO_PLUGIN_DIR, 'client-src', 'index.js')
-  || path.resolve(__dirname, '..', 'dsh-todo', 'client-src', 'index.js')
+  || (process.env.DSH_TODO_PLUGIN_DIR && path.join(process.env.DSH_TODO_PLUGIN_DIR, 'client-src', 'index.js'))
+  || resolveDefault()
 const text = fs.readFileSync(file, 'utf8')
 const lines = text.split(/\r?\n/)
 // 代码语句特征：关键字后面必须跟「像代码的下一段」（字母/数字/括号/引号），
