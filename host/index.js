@@ -201,6 +201,56 @@ function formatSections(text) {
  * v1.1.2 AI 记录默认提醒时间：把设置页枚举 key 解析成 ISO 字符串（基准 now）。
  * AI 无法从材料判断时间时兜底。''/none/未知 → undefined（不提醒）。
  */
+/**
+ * v1.5.11 统一的模型选择解析。
+ *
+ * 三处建会话的地方（aiCapture / aiSummarize / createFollowup）原来各写一遍
+ * 「config.aiModel 优先 → agentDefaultModel.currentSelection() 兜底」，而且都只取
+ * provider/model，把 reasoningEffort 丢了。思考强度是用户显式选的，丢了就等于
+ * 设置页那个下拉不起作用；同时跟随默认时也应沿用默认选择的 effort。
+ *
+ * @returns {{ provider: string, model: string, reasoningEffort?: string } | undefined}
+ */
+function resolveModelSelection(ctx, configAiModel) {
+  const fromConfig = configAiModel
+  if (fromConfig && typeof fromConfig.provider === 'string' && typeof fromConfig.model === 'string'
+    && fromConfig.provider.length > 0 && fromConfig.model.length > 0) {
+    return {
+      provider: fromConfig.provider,
+      model: fromConfig.model,
+      ...(typeof fromConfig.reasoningEffort === 'string' && fromConfig.reasoningEffort.length > 0
+        ? { reasoningEffort: fromConfig.reasoningEffort }
+        : {}),
+    }
+  }
+  try {
+    const resolved = ctx.get('agentDefaultModel')?.currentSelection?.()
+    if (resolved && typeof resolved.provider === 'string' && typeof resolved.model === 'string'
+      && resolved.provider.length > 0 && resolved.model.length > 0) {
+      return {
+        provider: resolved.provider,
+        model: resolved.model,
+        ...(typeof resolved.reasoningEffort === 'string' && resolved.reasoningEffort.length > 0
+          ? { reasoningEffort: resolved.reasoningEffort }
+          : {}),
+      }
+    }
+  } catch { }
+  return undefined
+}
+
+/** 把 resolveModelSelection 的结果转成 agents.create 的 agentOptions。 */
+function modelAgentOptions(selection) {
+  if (selection === undefined) return {}
+  return {
+    agentOptions: {
+      provider: selection.provider,
+      model: selection.model,
+      ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }),
+    },
+  }
+}
+
 function resolveAiDefaultReminder(key, now = new Date()) {
   const at = new Date(now)
   switch (key) {
@@ -585,17 +635,9 @@ function createService(ctx) {
         if (pendingCaptures.size >= 3) return { ok: false, error: '已有多个 AI 总结在进行中，请稍候' }
 
         const state = await readState()
-        // 模型解析：用户偏好优先，否则跟随当前会话默认模型。
-        let selection = state.config.aiModel
-        if (selection === undefined) {
-          try {
-            const defaults = ctx.get('agentDefaultModel')
-            const resolved = defaults?.currentSelection?.()
-            if (resolved && typeof resolved.provider === 'string' && typeof resolved.model === 'string') {
-              selection = { provider: resolved.provider, model: resolved.model }
-            }
-          } catch { }
-        }
+        // 模型解析：用户偏好优先，否则跟随当前会话默认模型（v1.5.11 统一到
+        // resolveModelSelection，顺带带上思考强度）
+        const selection = resolveModelSelection(ctx, state.config.aiModel)
 
         // v1.1 修复：必须显式生成并传入 sessionId，否则内部 agent id 为 undefined，
         // followup 报 "agent id undefined does not match session id ..."（参照 dsh-tasks）。
@@ -603,7 +645,7 @@ function createService(ctx) {
         const handle = await agentsOrThrow().create({
           sessionId,
           meta: { cwd: process.cwd() },
-          ...(selection === undefined ? {} : { agentOptions: { provider: selection.provider, model: selection.model } }),
+          ...modelAgentOptions(selection),
           setup: async (agentCtx) => {
             try {
               const presets = ctx.get('agentPresets')
@@ -654,22 +696,13 @@ function createService(ctx) {
         if (material.length === 0) return { ok: false, error: '待办内容为空' }
         if (pendingCaptures.size >= 3) return { ok: false, error: '已有多个 AI 总结在进行中，请稍候' }
 
-        // 模型解析与 aiCapture 相同：偏好优先 → 会话默认兜底
-        let selection = state.config.aiModel
-        if (selection === undefined) {
-          try {
-            const defaults = ctx.get('agentDefaultModel')
-            const resolved = defaults?.currentSelection?.()
-            if (resolved && typeof resolved.provider === 'string' && typeof resolved.model === 'string') {
-              selection = { provider: resolved.provider, model: resolved.model }
-            }
-          } catch { }
-        }
+        // 模型解析与 aiCapture 相同：偏好优先 → 会话默认兜底（v1.5.11 统一）
+        const selection = resolveModelSelection(ctx, state.config.aiModel)
         const sessionId = `session-${randomUUID()}`
         const handle = await agentsOrThrow().create({
           sessionId,
           meta: { cwd: process.cwd() },
-          ...(selection === undefined ? {} : { agentOptions: { provider: selection.provider, model: selection.model } }),
+          ...modelAgentOptions(selection),
           setup: async (agentCtx) => {
             try {
               const presets = ctx.get('agentPresets')
@@ -774,10 +807,19 @@ function createService(ctx) {
         let modelSource = 'none'
         if (sourceSessionId) {
           try {
-            const agent = ctx.agents?.get?.(sourceSessionId)
+            // v1.5.11：`ctx.agents` 同样是硬注入属性，不在 inject 里访问会抛错，
+            // `?.` 拦不住。改用 ctx.get('agents') 这条官方可选访问路径。
+            const agent = ctx.get?.('agents')?.get?.(sourceSessionId)
             const cfg = agent?.session?.requestHeader?.()?.config
             if (typeof cfg?.provider === 'string' && cfg.provider && typeof cfg?.model === 'string' && cfg.model) {
-              selection = { provider: cfg.provider, model: cfg.model }
+              // v1.5.11：源会话的思考强度也一起继承，否则新会话会悄悄退回模型默认档
+              selection = {
+                provider: cfg.provider,
+                model: cfg.model,
+                ...(typeof cfg.reasoningEffort === 'string' && cfg.reasoningEffort.length > 0
+                  ? { reasoningEffort: cfg.reasoningEffort }
+                  : {}),
+              }
               modelSource = 'session'
             }
           } catch { }
@@ -788,7 +830,10 @@ function createService(ctx) {
         }
         if (!selection) {
           try {
-            const resolved = ctx.agentDefaultModel?.currentSelection?.()
+            // v1.5.11：`ctx.agentDefaultModel` 是硬注入属性，不在 inject 里访问会抛
+            // 「cannot get property "agentDefaultModel" without inject」，`?.` 拦不住。
+            // 官方给的可选访问方式是 ctx.get(name)。
+            const resolved = ctx.get?.('agentDefaultModel')?.currentSelection?.()
             if (resolved?.provider && resolved?.model) { selection = resolved; modelSource = 'default' }
           } catch { }
         }
@@ -799,7 +844,7 @@ function createService(ctx) {
         const handle = await agentsOrThrow().create({
           sessionId,
           meta: { cwd },
-          ...(selection ? { agentOptions: { provider: selection.provider, model: selection.model } } : {}),
+          ...(selection ? modelAgentOptions(selection) : {}),
           setup: async (agentCtx) => {
             try {
               const presets = ctx.get('agentPresets')
@@ -878,11 +923,15 @@ function createService(ctx) {
       }
     },
 
-    /** 记住 AI 总结的模型偏好。 */
+    /**
+     * 记住 AI 总结的模型偏好。
+     * v1.5.11：加思考强度（reasoningEffort）。空串表示不指定，回落模型自身默认。
+     */
     async setAiModel(request) {
       try {
         const provider = normalizeText(request?.provider, 100)
         const model = normalizeText(request?.model, 100)
+        const effort = normalizeText(request?.reasoningEffort, 60)
         const state = await readState()
         // v1.1 两者都为空 = 清除偏好，跟随当前会话默认模型
         if (provider.length === 0 && model.length === 0) {
@@ -892,18 +941,93 @@ function createService(ctx) {
           return { ok: true }
         }
         if (provider.length === 0 || model.length === 0) return { ok: false, error: '参数无效' }
-        await writeConfig({ ...state.config, aiModel: { provider, model } })
+        const aiModel = { provider, model, ...(effort.length === 0 ? {} : { reasoningEffort: effort }) }
+        await writeConfig({ ...state.config, aiModel })
         return { ok: true }
       } catch (error) {
         return { ok: false, error: messageOf(error) }
       }
     },
 
-    /** v0.9.6 获取 DSH 已配置的模型列表（按 provider 分组，参照 dsh-tasks）。 */
+    /**
+     * v1.5.11 反馈②：获取 DSH 已配置的模型列表（按 provider 分组）。
+     *
+     * 旧实现只走 `ctx.get('llm').listProviders()`，在桌面端实测拿回空数组 ——
+     * 该服务在插件里是软依赖，适配器注册时机与插件激活顺序无关，插件先激活时
+     * listProviders() 还没注册任何 provider，下拉就只剩「跟随当前会话默认模型」一项。
+     *
+     * 现在补第二条路径：`ctx.get('sessionController')` 的 `modelCatalog()`，那是官方
+     * 模型选择器（dsh-client-ui-model-selection）用的同一个数据源，由宿主按当前
+     * Host generation 汇总出「真正可路由」的 provider / 模型 / 思考强度，
+     * 还带 routableProviders 与 failures。llm 路径保留作降级。
+     */
     async listModels(_request) {
       try {
+        // v1.5.11 修复：这里原来写 `ctx.agentDefaultModel?.currentSelection?.()`，
+        // 而 agentDefaultModel 是硬注入属性 —— 没进 inject 时访问立刻抛
+        // 「cannot get property "agentDefaultModel" without inject」（`?.` 拦不住），
+        // 异常被外层 catch 吃掉后 listModels 永远返回失败，模型下拉只剩「跟随」一项。
+        // 官方给的可选访问方式是 ctx.get(name)。
+        let defaultSelection = { provider: '', model: '' }
+        try {
+          const resolved = ctx.get?.('agentDefaultModel')?.currentSelection?.()
+          if (resolved && typeof resolved === 'object') {
+            defaultSelection = { provider: resolved.provider ?? '', model: resolved.model ?? '' }
+          }
+        } catch { /* 没有该服务就用空默认值 */ }
+        const fallbackDefault = { provider: defaultSelection.provider, model: defaultSelection.model }
+
+        // ① 首选：sessionController.modelCatalog()，与官方选择器同源
+        const controller = ctx.get('sessionController')
+        if (controller && typeof controller.modelCatalog === 'function') {
+          try {
+            const catalog = await controller.modelCatalog()
+            const groups = Array.isArray(catalog?.groups)
+              ? catalog.groups
+                  .filter((group) => Array.isArray(group?.models) && group.models.length > 0)
+                  .map((group) => ({
+                    id: String(group.id ?? ''),
+                    name: String(group.name ?? group.id ?? ''),
+                    models: group.models.map((model) => ({
+                      id: String(model.id ?? ''),
+                      name: String(model.name ?? model.id ?? ''),
+                      ...(typeof model.description === 'string' ? { description: model.description } : {}),
+                      ...(model.reasoning === undefined ? {} : {
+                        reasoning: {
+                          efforts: (model.reasoning?.efforts ?? []).map((effort) => ({
+                            id: String(effort.id ?? ''),
+                            name: String(effort.name ?? effort.id ?? ''),
+                            ...(typeof effort.description === 'string' ? { description: effort.description } : {}),
+                          })),
+                          ...(typeof model.reasoning?.defaultEffort === 'string' ? { defaultEffort: model.reasoning.defaultEffort } : {}),
+                        },
+                      }),
+                    })),
+                  }))
+              : []
+            if (groups.length > 0) {
+              return {
+                ok: true,
+                value: {
+                  default: {
+                    provider: String(catalog?.default?.provider ?? fallbackDefault.provider),
+                    model: String(catalog?.default?.model ?? fallbackDefault.model),
+                    ...(typeof catalog?.default?.reasoningEffort === 'string' ? { reasoningEffort: catalog.default.reasoningEffort } : {}),
+                  },
+                  groups,
+                  routableProviders: Array.isArray(catalog?.routableProviders) ? catalog.routableProviders : [],
+                  failures: Array.isArray(catalog?.failures) ? catalog.failures : [],
+                  source: 'modelCatalog',
+                },
+              }
+            }
+          } catch (error) {
+            appendDiag({ listModelsCatalogError: messageOf(error) })
+          }
+        }
+
+        // ② 降级：llm.listProviders()
         const llm = ctx.get('llm')
-        const defaultSelection = ctx.agentDefaultModel?.currentSelection?.() ?? { provider: '', model: '' }
         let groups = []
         if (llm && typeof llm.listProviders === 'function') {
           const providers = llm.listProviders()
@@ -924,8 +1048,9 @@ function createService(ctx) {
         return {
           ok: true,
           value: {
-            default: { provider: defaultSelection.provider ?? '', model: defaultSelection.model ?? '' },
+            default: fallbackDefault,
             groups,
+            source: 'llm',
           },
         }
       } catch (error) {

@@ -1683,7 +1683,7 @@ function ExportDialog({ items, onClose, showToast, inline = false }) {
         const result = buildExportFile(all, {
           format: target.id,
           scopes,
-          appVersion: '1.5.10',
+          appVersion: '1.5.11',
         })
         done.push(downloadExportFile(result))
       }
@@ -2148,7 +2148,7 @@ h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'spac
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('span', { style: { fontSize: 16 } }, '📋'),
           h('span', { style: { fontSize: 15, fontWeight: 600 } }, '待办清单设置'),
-          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.10'),
+          h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 6px', borderRadius: 4 } }, 'v1.5.11'),
         ),
         h('button', { type: 'button', onClick: onClose, style: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--dsh-alias-label-secondary)', padding: '4px 8px' } }, '×'),
       ),
@@ -2245,6 +2245,8 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
   const [search, setSearch] = useState('')
   const [filterDue, setFilterDue] = useState('all') // all | today | overdue | none
   const [aiModel, setAiModel] = useState('')
+  // v1.5.11：思考强度（reasoningEffort）。空串 = 不指定，用模型自己的默认档。
+  const [aiEffort, setAiEffort] = useState('')
   const [notifyPopup, setNotifyPopup] = useState(true)
   const [notifyIm, setNotifyIm] = useState(false)
   const [imBotId, setImBotId] = useState('')
@@ -2290,6 +2292,8 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
   ]
 
   // v0.9.6 加载 DSH 真实模型列表（按 provider 分组，参�?dsh-tasks�
+  // v1.5.11 反馈②：宿主 listModels 内部改为优先走 sessionController.modelCatalog()，
+  // 与官方模型选择器同一数据源，因此这里能拿到 provider/模型 + 每个模型的思考强度档位。
   useEffect(() => {
     void (async () => {
       try {
@@ -2298,6 +2302,8 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
         if (result.ok && result.value) {
           setModelGroups(result.value.groups ?? [])
           setDefaultModel(result.value.default ?? { provider: '', model: '' })
+        } else {
+          console.warn('[dsh-todo] listModels 返回失败：', result?.error)
         }
       } catch (error) {
         console.warn('[dsh-todo] listModels failed:', error)
@@ -2343,8 +2349,11 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
         // v1.1.2 回显已保存的 AI 记录模型（否则每次打开都显示跟随默认）
         if (value?.aiModel?.provider && value?.aiModel?.model) {
           setAiModel(`${value.aiModel.provider}/${value.aiModel.model}`)
+          // v1.5.11：回显思考强度
+          setAiEffort(typeof value.aiModel.reasoningEffort === 'string' ? value.aiModel.reasoningEffort : '')
         } else {
           setAiModel('')
+          setAiEffort('')
         }
         setAiDefaultReminder(value?.aiDefaultReminder ?? '')
         // v1.2.2 反馈⑤：回显左侧边栏开关（false 才下发，缺席 = 默认显示）
@@ -2370,7 +2379,14 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
       if (aiModel.length > 0) {
         const [provider, ...modelParts] = aiModel.split('/')
         const model = modelParts.join('/')
-        if (provider && model) await todosApi.setAiModel({ provider, model })
+        // v1.5.11：思考强度一并保存，否则「选了最高却按默认档跑」
+        if (provider && model) {
+          await todosApi.setAiModel({
+            provider,
+            model,
+            ...(aiEffort.length === 0 ? {} : { reasoningEffort: aiEffort }),
+          })
+        }
       }
       // v1.0 全局通知配置存入 config（走宿主 saveNotifyConfig�
       await todosApi.saveNotifyConfig({
@@ -2393,9 +2409,38 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
     }
   }, [aiModel, notifyPopup, notifyIm, imBotId, imTargetId, aiDefaultReminder, sidebarEnabled, todosApi, showToast])
 
+  // v1.5.11：当前选中模型对象（用于渲染思考强度档位）。aiModel 形如 `provider/model`，
+  // 而 provider 里可能带 `/`，所以按「provider 前缀 + 剩余部分」精确匹配，不要简单 split。
+  const selectedModel = (() => {
+    if (aiModel.length === 0) return undefined
+    for (const group of modelGroups) {
+      if (!aiModel.startsWith(`${group.id}/`)) continue
+      const modelId = aiModel.slice(group.id.length + 1)
+      const hit = (group.models ?? []).find((m) => m.id === modelId)
+      if (hit !== undefined) return { provider: group.id, model: hit }
+    }
+    return undefined
+  })()
+  const effortOptions = selectedModel?.model?.reasoning?.efforts ?? []
+  const showEffort = effortOptions.length > 0
+  const effectiveEffort = aiEffort.length > 0
+    ? aiEffort
+    : (selectedModel?.model?.reasoning?.defaultEffort ?? '')
+
   // v1.1 模型下拉即时生效：选择即保存，避免未点保存导致 AI 记录用错模型
+  // v1.5.11：切换模型时把思考强度重置为该模型的默认档（不同模型档位名不通用），
+  // 并把 effort 一并落库，否则设置页选了「最高」而实际按默认档跑，等于设置无效。
   const applyModelChange = useCallback(async (val) => {
     setAiModel(val)
+    // 找新模型的默认强度
+    let nextEffort = ''
+    if (val.length > 0) {
+      const group = modelGroups.find((g) => val.startsWith(`${g.id}/`))
+      const modelId = group === undefined ? '' : val.slice(group.id.length + 1)
+      const model = group === undefined ? undefined : (group.models ?? []).find((m) => m.id === modelId)
+      nextEffort = model?.reasoning?.defaultEffort ?? ''
+    }
+    setAiEffort(nextEffort)
     try {
       if (val.length === 0) {
         await todosApi.setAiModel({ provider: '', model: '' })
@@ -2404,12 +2449,33 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
         const [provider, ...modelParts] = val.split('/')
         const model = modelParts.join('/')
         if (provider && model) {
-          await todosApi.setAiModel({ provider, model })
-          showToast(`AI 记录模型已切换：${provider}/${model}`)
+          await todosApi.setAiModel({
+            provider,
+            model,
+            ...(nextEffort.length === 0 ? {} : { reasoningEffort: nextEffort }),
+          })
+          showToast(`AI 记录模型已切换：${provider}/${model}${nextEffort.length === 0 ? '' : `（强度 ${nextEffort}）`}`)
         }
       }
     } catch (e) { console.warn('[dsh-todo] apply model failed:', e) }
-  }, [todosApi, showToast])
+  }, [todosApi, showToast, modelGroups])
+
+  // v1.5.11：思考强度选择即保存。空值 = 交回模型默认档。
+  const applyEffortChange = useCallback(async (val) => {
+    setAiEffort(val)
+    if (aiModel.length === 0) return
+    const [provider, ...modelParts] = aiModel.split('/')
+    const model = modelParts.join('/')
+    if (!provider || !model) return
+    try {
+      await todosApi.setAiModel({
+        provider,
+        model,
+        ...(val.length === 0 ? {} : { reasoningEffort: val }),
+      })
+      showToast(val.length === 0 ? '思考强度已恢复默认' : `思考强度已设为 ${val}`)
+    } catch (e) { console.warn('[dsh-todo] apply effort failed:', e) }
+  }, [todosApi, showToast, aiModel])
 
   // v1.1.5 修复④：AI 记录默认提醒时间选择即保存（�?save 依赖数组�?aiDefaultReminder，闭包里永远是旧�?''，点了保存也存不上）
   const applyAiReminderChange = useCallback(async (val) => {
@@ -2541,17 +2607,14 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
     // 头部（参考 dsh-archive-manager）
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '16px 0', borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)' } },
       h('h2', { style: { fontSize: 20, fontWeight: 600, margin: 0 } }, '待办清单'),
-      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.10'),
+      h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', background: 'var(--dsw-alias-bg-layer-2, #f0f0f0)', padding: '2px 8px', borderRadius: 4 } }, 'v1.5.11'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 'auto' } }, 'GitHub'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/issues', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none' } }, '问题反馈'),
       h('a', { href: 'https://github.com/qgd1850890306-rgb/dsh-todo-checklist/releases', target: '_blank', style: { fontSize: 12, color: 'var(--dsw-alias-label-secondary)', textDecoration: 'none', marginLeft: 8 } }, '检查更新'),
     ),
-    h('p', { style: { fontSize: 13, color: 'var(--dsw-alias-label-secondary)', margin: '8px 0 16px' } }, '划词加待办清单 · AI 总结 · 定时提醒'),
-
-    // v1.5.10：横向两页（设置 / 待办清单）。
-    // 此前设置组、导出、状态 tab、列表全堆在一列，滚到列表时设置项还在上面，改完了不知道该往哪看。
-    // 分成两页后「改设置」和「处理待办」各自独立，切换成本只有一次点击。
-    h('div', { role: 'tablist', style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)', marginBottom: 16 } },
+    // v1.5.11 反馈①：分页 tab 上移到标题行下方、副标题上方。
+    // 此前 tab 夹在副标题和内容之间，副标题反而比导航更像「页头」，视觉层次错乱。
+    h('div', { role: 'tablist', style: { display: 'flex', gap: 4, borderBottom: '1px solid var(--dsw-alias-border-l2, #eee)' } },
       [{ id: 'settings', label: '设置' }, { id: 'records', label: `待办清单 (${pendingCount})` }].map((p) => h('button', {
         key: p.id,
         type: 'button',
@@ -2567,6 +2630,7 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
         },
       }, p.label)),
     ),
+    h('p', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)', margin: '10px 0 14px' } }, '划词加待办清单 · AI 总结 · 定时提醒'),
 
     page !== 'settings' ? null :
     h(Fragment, null,
@@ -2582,8 +2646,28 @@ function TodoSettingsPage({ todosApi, sessionOpen, listWorkspaceInfo, workspaceO
             )),
           ),
         ),
+        // v1.5.11 反馈②：思考强度。只有当前模型声明了档位才出现，
+        // 没声明说明这个模型不支持调，藏起来比给个空下拉诚实。
+        showEffort ? h('div', { style: { flex: '0 1 180px', minWidth: 150 } },
+          fieldLabel('思考强度'),
+          h('select', {
+            value: effectiveEffort,
+            onChange: (e) => { void applyEffortChange(e.target.value) },
+            style: { ...selectStyle, width: '100%' },
+          },
+            effortOptions.map((effort) => h('option', {
+              key: effort.id,
+              value: effort.id,
+              title: effort.description ?? '',
+            }, effort.name === effort.id ? effort.id : `${effort.name}`)),
+          ),
+          effectiveEffort.length === 0
+            ? null
+            : h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', marginTop: 4 } },
+              selectedModel?.model?.reasoning?.defaultEffort === effectiveEffort ? '模型默认档' : '已自定义'),
+        ) : null,
         h('div', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)', flex: '1 1 180px', paddingBottom: 4, lineHeight: 1.5 } },
-          '选完立即生效，不用再点保存。'),
+          showEffort ? '选完立即生效。强度越高越慢、越贵，效果通常更好。' : '选完立即生效，不用再点保存。'),
       ),
     ),
 

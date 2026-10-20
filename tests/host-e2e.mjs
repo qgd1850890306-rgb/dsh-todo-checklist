@@ -139,6 +139,26 @@ check('A20b 头部计数含已放弃，与正文勾选数一致',
 await svc.deleteTodo({ id: mkPending.value.id })
 await svc.deleteTodo({ id: mkAbandon.value.id })
 
+// v1.5.11 反馈②：思考强度（reasoningEffort）必须能存能读，
+// 且建会话时要真的进 agentOptions —— 只存在设置里不进请求 = 用户选了个寂寞。
+const setEff = await svc.setAiModel({ provider: 'deepseek', model: 'v4', reasoningEffort: 'max' })
+check(
+  'A21 setAiModel 落 reasoningEffort 且 list 回读得到',
+  setEff.ok === true
+    && (await svc.list({})).value.aiModel?.reasoningEffort === 'max'
+    && (await svc.list({})).value.aiModel?.provider === 'deepseek',
+  JSON.stringify((await svc.list({})).value.aiModel ?? null),
+)
+
+// 不传强度时应回到「不指定」，而不是留着上一次的值
+const clearEff = await svc.setAiModel({ provider: 'deepseek', model: 'v4' })
+check(
+  'A21b 不传思考强度时清空（回落模型默认档）',
+  clearEff.ok === true && (await svc.list({})).value.aiModel?.reasoningEffort === undefined,
+  JSON.stringify((await svc.list({})).value.aiModel ?? null),
+)
+await svc.setAiModel({ provider: '', model: '' })
+
 // ---------- B. 精简环境（无 agents / llm / dshIm） ----------
 const cap = await svc.aiCapture({ text: '明天给供应商发 DFMEA 模板' })
 check('B1 无 agents 时 aiCapture 返回友好错误', cap.ok === false && /agents/.test(String(cap.error)), String(cap.error))

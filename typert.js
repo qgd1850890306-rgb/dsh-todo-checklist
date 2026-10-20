@@ -53,7 +53,12 @@ const listResultSchema = z.object({
   error: z.string().optional(),
   value: z.object({
     items: z.array(itemSchema),
-    aiModel: z.object({ provider: z.string(), model: z.string() }).strict().optional(),
+    // v1.5.11：带 reasoningEffort，设置页据此回显思考强度下拉
+    aiModel: z.object({
+      provider: z.string(),
+      model: z.string(),
+      reasoningEffort: z.string().optional(),
+    }).strict().optional(),
     notify: z.object({
       popup: z.boolean().optional(),
       im: z.boolean().optional(),
@@ -164,6 +169,8 @@ const aiCaptureResultSchema = z.object({
 const setAiModelRequestSchema = z.object({
   provider: z.string().min(1),
   model: z.string().min(1),
+  // v1.5.11：思考强度。省略或空串 = 不指定，交回模型自身的 defaultEffort。
+  reasoningEffort: z.string().optional(),
 }).strict()
 
 // v1.1.1 createFollowup：在同一工作区新建会话并固定标题，返回新会话 ID
@@ -214,21 +221,49 @@ const convertToScheduleResultSchema = z.object({
 }).strict()
 
 // v0.9.7 listModels：返回 DSH 已配置模型（按 provider 分组）+ 当前默认
+// v1.5.11：补上思考强度（reasoningEffort）。官方 modelCatalog 每个模型可选地带
+// reasoning:{ efforts:[{id,name,description?}], defaultEffort? }，客户端据此渲染
+// 第二级下拉；不带的模型就是没有强度可调，下拉自动隐藏。
+const effortInfoSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+}).strict()
+const modelReasoningSchema = z.object({
+  efforts: z.array(effortInfoSchema),
+  defaultEffort: z.string().optional(),
+}).strict()
 const modelInfoSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  description: z.string().optional(),
+  reasoning: modelReasoningSchema.optional(),
 }).strict()
 const modelGroupSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   models: z.array(modelInfoSchema),
 }).strict()
+const modelFailureSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  message: z.string(),
+}).strict()
 const listModelsResultSchema = z.object({
   ok: z.boolean(),
   error: z.string().optional(),
   value: z.object({
-    default: z.object({ provider: z.string(), model: z.string() }).strict(),
+    default: z.object({
+      provider: z.string(),
+      model: z.string(),
+      reasoningEffort: z.string().optional(),
+    }).strict(),
     groups: z.array(modelGroupSchema),
+    // v1.5.11：诊断用。routableProviders 是「至少有一个可用模型」的 provider 路由；
+    // failures 是列不出模型的 provider 及原因。两者都可缺失（llm 降级路径没有）。
+    routableProviders: z.array(z.string()).optional(),
+    failures: z.array(modelFailureSchema).optional(),
+    source: z.enum(['modelCatalog', 'llm']).optional(),
   }).strict().optional(),
 }).strict()
 

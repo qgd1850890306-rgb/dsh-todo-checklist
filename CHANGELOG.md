@@ -3,6 +3,32 @@
 本插件遵循语义化版本：`主版本.次版本.修订号`。
 早期版本（0.x）为内部迭代，自 `1.0.0` 起面向使用者记录。
 
+## 1.5.11 — 2026-10-20
+
+设置页的「记录」组补上思考强度，提醒时间加日历选择；公开截图里的真实工作内容换成通用测试数据。
+
+### 新增
+
+- **思考强度可选**：选了具体模型后，「AI 记录模型」旁边会出现「思考强度」下拉，档位由模型自己声明（没有声明就不显示，而不是给个空下拉）。选完立即生效，并同步用于 AI 记录、AI 总结、新建跟进会话三条链路。此前只能选模型，强度永远是模型默认档。
+- **提醒时间加日历**：分段式输入旁新增日历按钮，点开是月视图，可以直接点某一天；上下月翻页、「今天」一键跳回。时分仍用分段式微调，两种方式读写同一个值，可以混着用。
+
+### 修复
+
+- **模型下拉里曾经只有一个「跟随当前会话默认模型」**：宿主侧取模型列表时直接读了 `ctx.agentDefaultModel` 与 `ctx.agents`，这两个服务是硬注入属性——插件没在 `inject` 里声明就访问会立刻抛错，`?.` 拦不住；异常被外层 catch 吃掉后列表永远是空的。改用官方给的可选访问方式 `ctx.get(name)` 后恢复。
+- **切换模型时思考强度回到该模型的默认档**：不同模型的档位名不通用，沿用上一个模型的强度会发出一个它不认识的值。
+
+### 变更
+
+- **公开截图与演示数据去掉真实工作内容**：截图里的 DFMEA、镜片公差、客户 8D、RoHS、供应商 PPAP 等换成「测试1…测试8」，数量与状态分布不变，演示效果不受影响。
+
+### English
+
+- **Reasoning effort is now selectable**: after picking a specific model, an "effort" dropdown appears next to it; the available levels come from the model itself (none declared means no dropdown, rather than an empty one). It applies immediately and is used by AI capture, AI summarize and follow-up session creation.
+- **A calendar for the reminder time**: a calendar button next to the segmented input opens a month view where you can click a day directly, page between months, and jump back to today. The hour and minute still use the segmented stepper; both write the same value.
+- **The model dropdown used to show only the Follow-the-session-default entry**: the host read `ctx.agentDefaultModel` and `ctx.agents` directly, but both are hard-injected services — touching them without declaring them in `inject` throws immediately and `?.` does not help; the exception was swallowed by the surrounding catch, leaving the list empty. It now uses the official optional accessor `ctx.get(name)`.
+- **Switching models resets the effort to that model's default**, because effort level names are not portable between models.
+- **Public screenshots and demo data no longer contain real work content** — DFMEA, lens tolerance, customer 8D, RoHS and supplier PPAP are replaced with "测试1…测试8" while keeping the same count and status distribution.
+
 ## 1.5.10 — 2026-10-20
 
 设置页拆成「设置 / 待办清单」两页，并修掉三处「点了没反应」的操作体验问题。
